@@ -2,25 +2,26 @@
 
 The showcase sample for the Ludens engine: **Ludens Frontier**, a streamed world that plays in the browser (GitHub Pages).
 
-This repository is a *consumer* of the engine, not part of it. It reaches the engine only through the packages pinned in
-`deps.lock` (simulation core `ludens-core`, GPU `wgpu-mojo`, audio `miniaudio-mojo`), so anything it needs that the engine
-does not offer is an engine change, not a workaround here.
+This repository is a *consumer* of the engine. The engine's game seam (`game/mode.mojo`, `GameMode`) is what this package
+runs games through; the engine supplies the game, this package decides the exports the page can call.
+
+## Build and check
+
+Run from the engine's wasm environment (it provides `ludens_wasm_rt`):
+
+    bash scripts/build_wasm.sh              # build/playground.wasm
+    node scripts/check_wasm.mjs <host.mjs> build/playground.wasm
+
+`<host.mjs>` is `ludens_wasm_rt.HOST_MJS`. The check compares against the native target's output for the same sources, which
+is the point: the same numbers on both targets.
 
 ## Status
 
-Bootstrap only. The plan lives in `docs/frontier_plan.md`: three levels of detail (goals, work lists, step-by-step
-instructions), with the stage order and the asset policy.
+- Working: an outside package builds a wasm module with its own `@export`s over the engine's seam (`app/main.mojo`).
+- Not yet: the streamed world (`game/frontier*.mojo` still lives in ludens-engine), the asset pipeline, and the page.
 
-The first stage (streaming world, culling, HUD) currently sits in ludens-engine as `game/frontier.mojo` and is to be moved
-here once the engine offers the interface it needs (a registered game mode, a renderer the game can drive, input
-without the engine's own app state).
-
-## Assets
-
-Only openly licensed material: CC0 or CC-BY. Each asset is listed with its URL, licence and sha256 in `assets/manifest.toml`
-(to come), and `assets/CREDITS.md` is generated from that list. Code is ours; art, animation, sound and fonts are not
-made here.
+See `docs/frontier_plan.md` and `docs/asset-policy.md`.
 
 ## Licence
 
-Code: see `LICENSE` (to come). Assets: per-asset, see `assets/CREDITS.md`.
+Code: see `LICENSE` (to come; awaiting a decision). Assets: per-asset, see `assets/CREDITS.md` (to come).
