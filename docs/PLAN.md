@@ -22,6 +22,8 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
 
 - Done: the seam (engine #58); the external entry (playground #2); the Frontier logic, HUD and exports moved here
   (playground #3, merged). Native and wasm agree (`scripts/check_parity.sh`).
+- Touch: the engine's virtual pad (`vpad.ts`, `vpad_view.ts`) is mounted on the page; its stick and buttons reach the
+  host as W A S D, Space and R (`scripts/touch_check.mjs`, three runs in CI).
 - Open: the Frontier **page** here (today it exists only in the engine, which still serves `?frontier`); engine #59 removes
   that copy and must not merge before the page exists here.
 

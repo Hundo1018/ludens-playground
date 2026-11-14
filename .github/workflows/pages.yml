@@ -55,6 +55,10 @@ jobs:
           sleep 2
           pixi run --manifest-path engine/pixi.toml -e wasm node scripts/host_check.mjs \
             "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen" build/shots/host 150
+      - name: "Touch: the engine's virtual pad drives W A S D, Space and R on a phone-sized screen"
+        run: |
+          pixi run --manifest-path engine/pixi.toml -e wasm node scripts/touch_check.mjs \
+            "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen" 240
       - name: Native and wasm give the same numbers
         run: |
           HOST="$(pixi run --manifest-path engine/pixi.toml -e wasm python3 -c 'import ludens_wasm_rt; print(ludens_wasm_rt.HOST_MJS)')"

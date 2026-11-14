@@ -16,6 +16,11 @@ python3 -m ludens_wasm_rt.build_wasm \
 cp build/page-build/host.wasm "$OUT/host.wasm"
 cp page/index.html page/app.js "$OUT/"
 cp build/deps/ludens-engine/shell/web/assets.mjs "$OUT/"  # the engine's loader: sha256 check, size cap, copy into wasm
+# the engine's virtual pad (TypeScript): types stripped with node, as the engine's own build_web.py does
+for ts in vpad vpad_view; do
+  node --input-type=module -e "import {stripTypeScriptTypes as s} from 'node:module';import fs from 'node:fs';fs.writeFileSync(process.argv[2], s(fs.readFileSync(process.argv[1], 'utf8')))" \
+    build/deps/ludens-engine/shell/web/$ts.ts "$OUT/$ts.js"
+done
 # assets: fetched and verified against the manifest, converted to the engine's binary formats, then indexed
 python3 scripts/fetch_assets.py
 CONV=build/assets/converted

@@ -4,6 +4,7 @@ import { instantiate } from "./host.mjs";
 import { createImports as wgpuImports } from "./webgpu_host.mjs";
 import { Runtime } from "./webgpu_runtime.mjs";
 import { loadAsset, stageAsset } from "./assets.mjs";
+import { mountVirtualPad } from "./vpad_view.js";
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("canvas");
@@ -54,6 +55,17 @@ async function boot() {
   const app = x.playground_host_init(sel, len, canvas.width, canvas.height);
   if (app === 0n) throw new Error("playground_host_init failed");
   stats.app = app;
+  // Touch: the engine's virtual pad. Its stick sends W A S D and its buttons send Space and R, through the same
+  // host input as the keyboard, so the protagonist moves from the pad exactly as from the keys.
+  const PAD = {
+    sticks: [{ id: "move", radius: 64, keys: { up: 87, down: 83, left: 65, right: 68 }, at: { left: 24, bottom: 24 } }],
+    buttons: [
+      { id: "jump", key: 32, label: "Jump", size: 76, at: { right: 24, bottom: 24 } },
+      { id: "reset", key: 82, label: "R", size: 56, at: { right: 124, bottom: 24 } },
+    ],
+  };
+  const padKey = (code, down) => x.playground_host_input(app, EV_KEY, code, down ? ACTION_PRESS : ACTION_RELEASE, 0, 0, 0);
+  stats.pad = mountVirtualPad(canvas, PAD, { key: padKey, look() {}, lookEnd() {} });
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
   if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
