@@ -53,15 +53,12 @@ for (let i = 0; i < Number(timeoutS) * 4; i++) {
   await sleep(250);
 }
 
-// Log every key the host receives: the pad and the keyboard share this entry point.
-await js(`(() => { window.__keys = []; const x = window.host.x; const orig = x.playground_host_input;
-  x.playground_host_input = (app, kind, key, action, mods, mx, my) => {
-    if (kind === ${EV_KEY}) window.__keys.push({ key, down: action === 1 || action === 2 });
-    return orig(app, kind, key, action, mods, mx, my); }; })()`);
+// Every key the pad sends is recorded by the page in window.host.padLog as [code, down].
+await js('window.host.padLog = []');
 
 const touch = (type, points = []) => send('Input.dispatchTouchEvent',
   { type, touchPoints: points.map(([x, y], i) => ({ x, y, id: i })) });
-const take = async () => js('(() => { const k = window.__keys.slice(); window.__keys.length = 0; return k; })()');
+const take = async () => js("(() => { const k = (window.host.padLog || []).map(([key, down]) => ({ key, down: !!down })); window.host.padLog = []; return k; })()");
 const pressed = (ev, k) => ev.some((e) => e.key === k && e.down);
 const released = (ev, k) => ev.some((e) => e.key === k && !e.down);
 
