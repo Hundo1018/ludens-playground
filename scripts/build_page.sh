@@ -20,7 +20,8 @@ cp build/deps/ludens-engine/shell/web/assets.mjs "$OUT/"  # the engine's loader:
 python3 scripts/fetch_assets.py
 CONV=build/assets/converted
 rm -rf "$CONV" && mkdir -p "$CONV" "$OUT/assets"
-python3 scripts/convert_glb.py build/assets/src/CesiumMan.glb "$CONV/CesiumMan.lcharacter"
+# CesiumMan carries the rest clip (kind 100) and the CMU walk, retargeted in place (kind 101, step 6.2)
+python3 scripts/retarget.py build/assets/src/CesiumMan.glb build/assets/src/07.asf build/assets/src/07_01.amc "$CONV/CesiumMan.lcharacter"
 python3 scripts/convert_glb.py build/assets/src/Fox.glb "$CONV/Fox.lcharacter"
 python3 scripts/convert_texture.py build/assets/src/concrete_wall_008_diff_1k.jpg "$CONV/concrete_wall_008.ltexture"
 # the page ships these three; nothing else in the converted directory

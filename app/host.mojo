@@ -353,7 +353,7 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
         for i in range(Int(length)):
             bytes[i] = src[i]
         if kind == 1:
-            h[].cesium = parse_character(bytes, 100)
+            h[].cesium = parse_character(bytes, 101)  # the CMU walk, retargeted in place (step 6.2)
         elif kind == 2:
             h[].fox = parse_character(bytes, 101)  # the Walk clip: the converter writes Survey 100, Walk 101, Run 102
         elif kind == 3:
