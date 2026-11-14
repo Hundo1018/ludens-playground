@@ -166,6 +166,12 @@ Earlier plan text follows.
 - Normalise each feature by its standard deviation.
 - Match by brute force every 0.1 s, and crossfade over 0.2 s.
 - U6.7 is to grep ludens-core for an existing MotionDB or matcher first.
+Recorded deviation (2026-11-14, step 6.3): the design asks for walk, run and turn trials from one subject. Subject 07
+has walk, slow walk and brisk walk only (the CMU search page, subject 7: trials 1 to 12, no run, no turn). The database
+uses 07_01 (walk), 07_04 (slow walk) and 07_12 (brisk walk). Its features separate speed (mean hip speed 0.92, 0.63 and
+1.30 m/s) but not turning: the facing components of the trajectory vary only with the walk's own heading changes, so
+M6 cannot show that a turn is matched. A subject with run and turn trials is a separate change, since it needs its own
+ASF, the M1 and M2 checks, and a leg ratio.
 
 ### 1.9 Checks
 
