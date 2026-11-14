@@ -70,6 +70,7 @@ license = "OFL-1.1"
 author = "The Press Start 2P Project Authors"
 source_page = "https://fonts.google.com/specimen/Press+Start+2P"
 # "Press Start 2P" is a Reserved Font Name. A converted bitmap table is derived from this font: do not give it that name.
+changes = "rasterised by scripts/convert_font.py to an 8x8 glyph table (.lfont), printable ASCII; the TTF itself is not shipped"
 
 [[asset]]
 id = "font_press_start_2p_licence"
