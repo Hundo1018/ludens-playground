@@ -1,5 +1,5 @@
 # M6 (design 1.9): a query built from database frame k returns k, for 20 values of k, at distance 0. Run natively by
-# scripts/test_frontier_native.sh with build/assets/converted/CesiumMan.lcharacter (kind 100 is its only clip).
+# scripts/test_frontier_native.sh on build/assets/converted/CesiumMan.lcharacter, clip 101: the CMU walk the page plays.
 from std.sys import argv
 from harness.runner import Suite
 from frontier_assets import parse_character
@@ -14,7 +14,7 @@ def read_file(path: String) raises -> List[UInt8]:
 
 def main() raises:
     var s = Suite("motion_match_native")
-    var c = parse_character(read_file("build/assets/converted/CesiumMan.lcharacter"), 100)
+    var c = parse_character(read_file("build/assets/converted/CesiumMan.lcharacter"), 101)  # the CMU walk, as the page plays it (host.mojo)
     var m = build_match(c)
     var frames = m.track.frames
     s.check(frames >= 20, "clip has at least 20 frames: " + String(frames))
@@ -62,6 +62,10 @@ def main() raises:
         var raw2 = m.raw(f)
         toe_u += Float64(raw2[0]) + Float64(raw2[5])
     s.check(toe_u / Float64(2 * frames) > 0.0, "facing: the toes lie ahead of the hip on average (" + String(toe_u / Float64(2 * frames)) + " m)")
+    var u_mean = uu / Float64(rows)
+    var v_mean = vv / Float64(rows)
+    s.check(u_mean > 0.8 and u_mean < 2.0, "walk: the hip moves forward 0.8 to 2.0 m/s in the facing frame (" + String(u_mean) + ")")
+    s.check(abs(v_mean) < 0.2 * u_mean, "walk: sideways drift is small against forward speed (" + String(v_mean) + ")")
     s.check(Float64(m.track.min_ground) > 0.05, "facing: the hip's ground projection never collapses (min " + String(m.track.min_ground) + " m)")
     var got = m6_hash(m)
     var want = m6_hash_of(m6_frames(frames))
