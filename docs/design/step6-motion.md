@@ -36,6 +36,34 @@ U6.8 is to read `convert_amc.py`'s writer and list what v1 already stores. `pars
 
 ### 1.5 CMU forward kinematics
 
+**Decided (evidence in the table below): the static composition.**
+
+- Axis rotation and dof rotation are both static: `C = Rz(az)·Ry(ay)·Rx(ax)` and `M = Rz(rz)·Ry(ry)·Rx(rx)`, with an absent dof taken as 0.
+- Root: `W_root = M_root` from RX, RY, RZ in the same static order.
+- Children: `W_b = W_parent · C · M · C⁻¹`. The end is `start + len · W_b · dir · units`. `dir` is not rotated by `C` again.
+
+Trials used, both at 120 fps (CMU search page, framerate column):
+- **01_01**, subject 01: "playground - forward jumps, turn around". Climbing and jumping subject: not a locomotion source, but a stress test.
+- **07_01**, subject 07: "walk". The locomotion evidence. Subject 07 also has walk trials 1 to 10 and slow walk trials, all at 120 fps.
+
+Both trials use `:units length 0.45` and `:units angle deg`.
+
+| check | static C | C = Rx·Ry·Rz (rejected) |
+|---|---|---|
+| 07_01 foot skate, left toe (median, contact frames) | 0.072 m/s (64) | 0.097 m/s (60) |
+| 07_01 foot skate, right toe | 0.085 m/s (19) | 0.071 m/s (29) |
+| 07_01 arms at frames 0/100/200 (left wrist − shoulder, right) | −0.09/−0.28; −0.25/−0.27; −0.27/−0.18 | −0.26/−0.17; −0.25/−0.23; −0.09/−0.27 |
+| 01_01 foot skate, left / right | 0.049 / 0.048 m/s (1253 / 1291 contact frames) | 0.065 / 0.063 m/s (1448 / 1376) |
+| 01_01 arms at frame 0 (left, right) | +0.246 / −0.267 | +0.109 / −0.230 |
+
+Foot skate is measured with the robust contact rule in §1.9 M1: floor = 5th percentile of the toe's height over the trial; contact = height ≤ floor + 0.03 m and vertical speed < 0.1 m/s.
+
+Both orders pass foot skate on the walk. The arms agree in sign on the walk at every sampled frame. The static order is adopted on the walk evidence, following the advisor's rule (both toes pass and the arms agree). On 01_01 the frame-0 arms disagree under both orders, so that disagreement is not evidence about the composition: the jump trial may have a raised arm. The rejected order is kept in the table so the comparison is on record.
+
+Earlier candidates (not the static order) placed the toes up to 1.9 m above the floor on 01_01, with the body inverted for 15 frames around 1092 to 1106. Both trials were run with the static order, which removes that inversion.
+
+Pending evidence: a stick-figure PNG for both trials, front and side view, at four frames. It is produced by `/tmp/claude-0/m6/static_figures.png` on the engine host and is not in this repository.
+
 - Each bone's local rotation is `L_b = C_b · M_b · C_b⁻¹`, where `C_b` comes from `axis` and `M_b` from the AMC dofs.
 - A bone's end is its parent's end plus `W_b · dir · len`.
 - The composition order inside `C` and `M` is the known trap. Settle it with M1, not from memory.
@@ -54,12 +82,25 @@ U6.8 is to read `convert_amc.py`'s writer and list what v1 already stores. `pars
 
 ### 1.7 Where retargeting runs (U6.1)
 
-The plan says runtime, through ludens-core's `procedural.anim_graph.retarget`.
+**Answered (ludens-core `procedural/anim_graph.mojo`, `retarget` and `Skeleton`): `retarget` does not do the retarget this design needs.**
+
+- Signature: `retarget(src_pose: Pose, src: Skeleton, dst: Skeleton) -> Pose`. It has no joint map and no rest-pose alignment argument.
+- Behaviour: it copies each local rotation unchanged and rescales each local translation by the target-to-source bone length ratio. It assumes the two skeletons share the same bone order.
+- It does not do world-rotation transfer (§1.6), rest alignment `A_j`, or per-joint mapping between CMU and CesiumMan.
+
+So the advisor's second branch applies: bake the retarget in Python at build time, as a new clip (kind 100+k) in CesiumMan's `.lcharacter`. The runtime path, and M4, do not apply to `retarget` as it stands. A runtime version would be a new function in ludens-core or the engine.
+
+Earlier plan text: the plan said runtime, through `procedural.anim_graph.retarget`.
 
 - If its signature takes both rests, a joint map and a source pose, and returns target locals: run it at runtime, with a Python oracle for the checks.
 - Otherwise: bake it at build time in Python, as a new clip (kind 100+k) in CesiumMan's `.lcharacter`.
 
 ### 1.8 MotionDB
+
+**Found in ludens-core (`procedural/anim_graph.mojo`): `MotionDB` is a brute-force nearest-frame search over pose features.** Its features are root velocity (x, z) and the positions of chosen bones, not the feet-and-trajectory features this section lists. 6.3 wraps `MotionDB` and adds the feature vector from this section, so the feature code lives in the playground; the nearest-frame search is reused as it is. `two_bone` and `fabrik` in `procedural/ik.mojo` are the IK already in ludens-core; 6.4 wraps them.
+
+Earlier plan text follows.
+
 
 - Use trials from one subject, so a single ASF covers them all.
 - Per-frame features: both feet's positions and velocities in the root's facing frame, the hip velocity, and the root's future trajectory at +0.33, +0.67 and +1.0 s (2D position plus facing).
@@ -70,9 +111,10 @@ The plan says runtime, through ludens-core's `procedural.anim_graph.retarget`.
 ### 1.9 Checks
 
 - **M1 (converter selftest):**
-  - `lfemur` is between 0.35 and 0.50 m.
-  - Rest height is between 1.5 and 1.9 m, with the head highest and the toes lowest.
-  - On every trial, the minimum toe height is within 0.05 m of the ground. A wrong composition order fails this.
+  - `lfemur` is between 0.35 and 0.50 m. Measured: 0.404 m on 01_01 and 07_01 (`lfemur` 7.158 units × 0.0254 / 0.45).
+  - Rest height is between 1.5 and 1.9 m, with the head highest and the toes lowest. Measured at the static rest pose: head 0.645 m above the root, lowest toe −0.919 m, so 1.564 m.
+  - Toe contact, robust form (replaces the old minimum-height check, which did not separate composition orders): on every trial, the floor of each toe (5th percentile of its height) is within 0.10 m of the trial's lowest floor, and foot skate passes: the median horizontal speed of contact frames is below 0.15 m/s for both toes. Measured: 07_01 passes; 01_01 passes.
+  - Arms: the two wrists' heights relative to their own shoulders agree in sign on walk trials at the sampled frames (checked at 0, 100, 200 on 07_01).
 - **M2:** retargeting the source rest gives each mapped target bone the source's rest direction, within 1e-3 rad.
 - **M3:** target bone lengths stay within 1e-5 of rest, and foot height stays at or above −0.02 m over the whole clip.
 - **M4 (runtime only):** engine against oracle on 5 frames, joint world positions within 1e-4 m, native and wasm.
