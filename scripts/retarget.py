@@ -329,13 +329,14 @@ def loop_window(asf, frames, period_range=(100, 160), start_range=(0, 60), by_ra
     return best[1], best[2]
 
 
-def build_with_floor(glb, asf_path, amc_path, out_path, period_range=(100, 160), by_ratio=False):
+def build_with_floor(glb, asf_path, amc_path, out_path, period_range=(100, 160), by_ratio=False, db=False):
     """Two passes: a bake with no offset, the feet measured in it, then the offset applied and the clip written again.
     The offset moves the root's height only."""
     import array as _array
     asf = mf.parse_asf(asf_path)
     frames_all = source_frames(asf, amc_path)
-    window = loop_window(asf, frames_all, period_range=period_range, by_ratio=by_ratio)
+    # db mode (database-only clips, never wrapped): the whole trial, no loop window (docs/design/step6-motion.md §1.8)
+    window = (0, min(len(frames_all), period_range[1])) if db else loop_window(asf, frames_all, period_range=period_range, by_ratio=by_ratio)
     tmp = out_path + ".tmp"
     build(glb, asf_path, amc_path, tmp, root_dy=0.0, window=window)
     header, blobs, offsets = cg.read_back(pathlib.Path(tmp))
@@ -398,14 +399,14 @@ def eval_bake(glb, asf_path, amc_path, window):
     return [mirror_world(root_m, vals, f, J, parents) for f in range(len(vals) // (J * 10))]
 
 
-def check(out_path, glb, asf_path, amc_path, kind=101, period_range=(100, 160), by_ratio=False):
+def check(out_path, glb, asf_path, amc_path, kind=101, period_range=(100, 160), by_ratio=False, db=False):
     """M2 (direction, mapped non-leaf joints), M3 (bone lengths; the floor percentile within 0.01 m of rest; leg_5 not
     below -0.02 m), the target foot skate on leg_*_5 (median below 0.15 m/s, the root-ratio check), and the loop seam
     (the jump from the last clip frame to the first at most twice the median per-frame joint displacement)."""
     import array as _array
     asf = mf.parse_asf(asf_path)
     frames_all = source_frames(asf, amc_path)
-    a0, b0 = loop_window(asf, frames_all, period_range=period_range, by_ratio=by_ratio)
+    a0, b0 = (0, min(len(frames_all), period_range[1])) if db else loop_window(asf, frames_all, period_range=period_range, by_ratio=by_ratio)
     d = cg.convert(pathlib.Path(glb), DST_FPS)
     parents = d["joint_parents"]
     J = len(parents)
@@ -487,7 +488,8 @@ def check(out_path, glb, asf_path, amc_path, kind=101, period_range=(100, 160), 
     med_disp = disp[len(disp) // 2]
     seam = sum(math.dist(p, q) for p, q in zip(joints(worlds[-1]), joints(worlds[0])))
     print(f"loop seam: total joint jump {seam:.4f} m vs median per-frame total {med_disp:.4f} m (bound 2x)")
-    fails.append(("seam", seam <= 2 * med_disp))
+    if not db:  # the seam guards looped playback only; a database-only clip never wraps
+        fails.append(("seam", seam <= 2 * med_disp))
 
     for name, ok in fails:
         print(f"{name}: {'PASS' if ok else 'FAIL'}")
@@ -501,10 +503,10 @@ def build_clips(glb, asf_path, trials, out_path):
     range bounds the loop window's length in source frames (the slow walk's cycle is longer than the default 100-160)."""
     import array as _array
     d = cg.convert(pathlib.Path(glb), DST_FPS)
-    for k, (name, amc, period_range, by_ratio) in enumerate(trials):
+    for k, (name, amc, period_range, by_ratio, db, asf_k) in enumerate(trials):
         kind = 101 + k
         tmp = out_path + f".{kind}.tmp"
-        n, J, window = build_with_floor(glb, asf_path, amc, tmp, period_range=period_range, by_ratio=by_ratio)
+        n, J, window = build_with_floor(glb, asf_k or asf_path, amc, tmp, period_range=period_range, by_ratio=by_ratio, db=db)
         header, blobs, offsets = cg.read_back(pathlib.Path(tmp))
         vals = _array.array("f")
         vals.frombytes(blobs[101])
@@ -518,13 +520,20 @@ def build_clips(glb, asf_path, trials, out_path):
 
 
 def parse_trials(args):
-    """name=amc or name=amc:min:max[:r]: the loop window's period range in source frames; r = the seam criterion."""
+    """name=amc[:min:max[:r|db]][@asf]: the loop window's period range in source frames; r = the seam criterion;
+    db = a database-only clip (no loop window, no seam check): the first max source frames of the trial, so the
+    period range's upper bound is the clip's length cap; @asf = this trial's own skeleton file
+    (a subject other than the default's). Returns (name, amc, period_range, by_ratio, db, asf or None)."""
     trials = []
     for a in args:
         name, rest = a.split("=", 1)
+        asf = None
+        if "@" in rest:
+            rest, asf = rest.split("@", 1)
         parts = rest.split(":")
         pr = (int(parts[1]), int(parts[2])) if len(parts) >= 3 else (100, 160)
-        trials.append((name, parts[0], pr, len(parts) == 4 and parts[3] == "r"))
+        flag = parts[3] if len(parts) == 4 else ""
+        trials.append((name, parts[0], pr, flag == "r", flag == "db", asf))
     return trials
 
 
@@ -537,9 +546,9 @@ def main(argv):
         # the per-trial checks of a built file, for the same trial list as --clips: exit 1 if any trial fails
         out, glb, asf_path = argv[2], argv[3], argv[4]
         status = 0
-        for k, (name, amc, pr, by_ratio) in enumerate(parse_trials(argv[5:])):
+        for k, (name, amc, pr, by_ratio, db, asf_k) in enumerate(parse_trials(argv[5:])):
             print(f"== {name} (kind {101 + k})")
-            if check(out, glb, asf_path, amc, 101 + k, pr, by_ratio) != 0:
+            if check(out, glb, asf_k or asf_path, amc, 101 + k, pr, by_ratio, db) != 0:
                 status = 1
         print("check-clips: " + ("PASS" if status == 0 else "FAIL"))
         return status

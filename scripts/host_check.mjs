@@ -89,8 +89,8 @@ for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
   need(err >= 0 && err < 1e-4, `B1: the ${name} rest pose reproduces root_transform * p (max error ${err})`);
 }
 // M6 (design 1.9): the 20 query frames of CesiumMan's clip return their own frames; the hash of the matched indices is
-// the value tests/motion_match_native.mojo prints (437896, three CMU trials). Native and wasm must agree on it.
-const M6_NATIVE_HASH = 437896;
+// the value tests/motion_match_native.mojo prints (93419, six CMU trials). Native and wasm must agree on it.
+const M6_NATIVE_HASH = 93419;
 const m6 = await js('window.host.x.playground_host_motion_hash(window.host.app)');
 console.log(`M6 motion-match hash on the page: ${m6} (native ${M6_NATIVE_HASH})`);
 need(m6 === M6_NATIVE_HASH, `M6: the page's motion matching returns the same 20 indices as native (hash ${m6})`);
