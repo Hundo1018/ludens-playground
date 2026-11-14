@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: "Assets - manifest, licences and credits agree"
+        run: python3 scripts/fetch_assets.py --check
       - uses: actions/checkout@v5
         with:
           repository: Hundo1018/ludens-engine

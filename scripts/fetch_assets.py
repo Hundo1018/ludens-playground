@@ -30,7 +30,7 @@ LICENCES = {
 }
 REQUIRED = ("id", "kind", "url", "file", "sha256", "license", "author", "source_page")
 CMU_HTTP = "http://mocap.cs.cmu.edu/"
-KINDS = {"texture", "model", "character", "motion", "sound", "font"}
+KINDS = {"texture", "model", "character", "motion", "sound", "font", "text"}
 
 
 def load() -> list[dict]:
@@ -93,6 +93,16 @@ def credits_text(entries: list[dict]) -> str:
         lines.append(
             f"| {e['id']} | {e['kind']} | {e['author']} | {e['license']} | <{e['source_page']}> |"
         )
+    changed = [e for e in entries if e.get("changes")]
+    if changed:
+        lines += ["", "## Changes made", ""]
+        for e in sorted(changed, key=lambda x: x["id"]):
+            lines.append(f"- {e['id']}: {e['changes']}")
+    acked = [e for e in entries if e.get("acknowledgement")]
+    if acked:
+        lines += ["", "## Acknowledgements", ""]
+        for e in sorted(acked, key=lambda x: x["id"]):
+            lines.append(f"- {e['id']}: {e['acknowledgement']}")
     lines += ["", "## Licences", ""]
     for code in sorted({e["license"] for e in entries}):
         lines.append(f"- `{code}`: {LICENCES[code]}")

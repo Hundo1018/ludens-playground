@@ -21,6 +21,9 @@ sha256 = "b7001eaeea8254bd44773bcd247e78696d94169388fbb2a1800fc69434e777d9"
 license = "CC-BY-4.0"
 author = "Cesium (model); Khronos glTF-Sample-Assets (distribution)"
 source_page = "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan"
+# The model's README lists the Cesium logo under a separate LicenseRef-LegalMark-Cesium. The converter does not carry
+# textures, so the logo is not shipped. Read those terms before any texture from this file is used.
+changes = "converted by scripts/convert_glb.py to the playground's flat format: geometry, skin and animation samples; textures and materials not carried over"
 
 [[asset]]
 id = "char_fox"
@@ -31,6 +34,7 @@ sha256 = "d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7"
 license = "CC-BY-4.0"
 author = "tomkranis (model, 2014); glTF conversion by AsoboStudio and scurest (2017); all CC-BY 4.0"
 source_page = "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox"
+changes = "converted by scripts/convert_glb.py to the playground's flat format: geometry, skin and animation samples; textures and materials not carried over"
 
 [[asset]]
 id = "motion_cmu_01_01"
@@ -41,6 +45,7 @@ sha256 = "00a0c2889be1b8348ad31af98a1121fc0514984822922811de8564c83406b944"
 license = "CMU-MOCAP"
 author = "CMU Graphics Lab Motion Capture Database, subject 01"
 source_page = "http://mocap.cs.cmu.edu/"
+acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
 
 [[asset]]
 id = "motion_cmu_01_skeleton"
@@ -51,6 +56,7 @@ sha256 = "e993ace64e67bcfeaa378e1818db48dbc80fa1ebc3942c07338498ce5fdbcce5"
 license = "CMU-MOCAP"
 author = "CMU Graphics Lab Motion Capture Database, subject 01"
 source_page = "http://mocap.cs.cmu.edu/"
+acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
 
 [[asset]]
 id = "font_press_start_2p"
@@ -58,6 +64,17 @@ kind = "font"
 url = "https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/PressStart2P-Regular.ttf"
 file = "PressStart2P-Regular.ttf"
 sha256 = "034c77f1f05ec89421e4a63f0e3a4ca1ecf852cc6d2bf611f126f275728e017d"
+license = "OFL-1.1"
+author = "The Press Start 2P Project Authors"
+source_page = "https://fonts.google.com/specimen/Press+Start+2P"
+# "Press Start 2P" is a Reserved Font Name. A converted bitmap table is derived from this font: do not give it that name.
+
+[[asset]]
+id = "font_press_start_2p_licence"
+kind = "text"
+url = "https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/OFL.txt"
+file = "PressStart2P-OFL.txt"
+sha256 = "705960c3281a5765ecc0b59bd4ed7ca59eed165748076bc2fc3e8fdbfeb944b0"
 license = "OFL-1.1"
 author = "The Press Start 2P Project Authors"
 source_page = "https://fonts.google.com/specimen/Press+Start+2P"

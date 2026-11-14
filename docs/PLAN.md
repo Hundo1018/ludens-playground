@@ -54,5 +54,6 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 ## Decisions
 
 - Licence: MIT for code (matches the engine). Third-party notices in `THIRD_PARTY.md`.
-- The playground has no CI yet. Adding one needs its own pixi manifest (the engine's wasm environment is not reusable as
-  is); until then, a fresh-clone local run is the evidence, and each PR says so.
+- CI: `.github/workflows/pages.yml` is the only workflow. It checks the asset manifest and credits, builds the page
+  against the pinned engine, plays it headless, checks native against wasm, and deploys from main. The engine's pixi
+  environment is used as is, through its manifest path; the playground has no pixi manifest of its own.
