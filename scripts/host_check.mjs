@@ -88,6 +88,12 @@ for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
   console.log(`${name} rest pose: max |palette * p - root_transform * p| = ${err}`);
   need(err >= 0 && err < 1e-4, `B1: the ${name} rest pose reproduces root_transform * p (max error ${err})`);
 }
+// M6 (design 1.9): the 20 query frames of CesiumMan's clip return their own frames; the hash of the matched indices is
+// the value tests/motion_match_native.mojo prints (594568). Native and wasm must agree on it.
+const M6_NATIVE_HASH = 594568;
+const m6 = await js('window.host.x.playground_host_motion_hash(window.host.app)');
+console.log(`M6 motion-match hash on the page: ${m6} (native ${M6_NATIVE_HASH})`);
+need(m6 === M6_NATIVE_HASH, `M6: the page's motion matching returns the same 20 indices as native (hash ${m6})`);
 // B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
 // Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.
 const b3Cases = [[1, 0], [1, 15], [1, 30], [1, 45], [1, 60], [2, 0], [2, 11], [2, 22]];

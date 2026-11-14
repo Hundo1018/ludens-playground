@@ -15,6 +15,7 @@ from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
 from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame
+from motion_match import build_match, m6_hash
 from geometry.mat import Mat4, transform_point4
 from game.arena import DrawItem
 from wgpu._backend.wgpu_native.types import WGPUTextureAspect
@@ -364,6 +365,21 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
     except e:
         print("playground_host_asset:", e)
         return -1
+
+
+@export
+def playground_host_motion_hash(app: UInt64) abi("C") -> Int32:
+    """M6 (design 1.9): the hash of the indices the 20 query frames return in CesiumMan's clip (motion_match.m6_hash).
+    -1: the character is not loaded. -2: the matching failed (printed)."""
+    var h = _host(app)
+    if not h[].cesium:
+        return -1
+    try:
+        var m = build_match(h[].cesium.value().copy())
+        return Int32(m6_hash(m))
+    except e:
+        print("playground_host_motion_hash:", e)
+        return -2
 
 
 @export
