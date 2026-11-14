@@ -108,6 +108,26 @@ Nearest-start check: CMU scaled to CesiumMan's hip height (0.755), roots aligned
 
 Rest alignment: `A_j` is the shortest arc from the target's rest direction (child minus joint, in the shared frame) to the source bone's rest direction. The joint with several children uses its first child in the chain (torso_1 → torso_2; torso_3 → neck_1). Leaves (4, 9, 10, 17, 18) take their parent's `A_j`. Twist about a bone is not constrained by the arc; the elbow and knee bend are checked in the figures.
 
+Root ratio, revised (§1.6, step 6.1 fix): the earlier 0.755 from hip heights is withdrawn. Stance skate depends on leg length, so the ratio is derived from segment lengths: CesiumMan's thigh plus shin (rest world, mean of the two legs) over subject 07's femur plus tibia (ASF). The derived value is **0.6711**, computed in `retarget.py` (`leg_ratio`), not a constant.
+
+Ratio sweep, measured at 120 fps (target foot skate on leg_L_5 / leg_R_5, m/s; contact frames in brackets are about 45 to 53):
+
+| ratio | left | right |
+|---|---|---|
+| 0.60 | 0.078 | 0.092 |
+| 0.63 | 0.062 | 0.089 |
+| 0.66 | 0.073 | 0.097 |
+| 0.69 | 0.094 | 0.114 |
+| 0.6711 (derived) | 0.077 | 0.101 |
+
+The derived value is 0.04 above the sweep's minimum (0.63) on the left. Both toes pass the 0.15 bound at it, so it is kept and the difference is recorded. The earlier 30 fps skate check had 13 contact frames and failed at 0.162 and 0.169; the 120 fps check is the one that counts.
+
+Floor: the 5th percentile of min(leg_L_5, leg_R_5) is moved to CesiumMan's rest leg height (0.0212 m, world) by a root-y offset, two-pass. The offset is +0.0008 m. Without it the feet floated about 6.6 cm.
+
+Loop window: [58, 190) of 07_01, the window whose two ends are closest with root xz removed (1.1 s, one gait cycle). The seam jump is 0.476 m against a median per-frame total of 0.321 m (bound 2×).
+
+Playback: in place. The bake keeps the root's travel (world space), so the 6.3 matching has it. The host removes the root's horizontal translation in `pose_palette_frame`, before `build_palette_root`, with `strip_root_xz`; `rest_palette` is unchanged, so B1 checks the true rest.
+
 Root rule: CesiumMan's clip locals are in its own frame before `root_transform`. The root joint's local is `root_transform⁻¹ · W_0`, and its translation is the scaled CMU root position (ratio 0.755 = 0.593 / 0.785, the hip above the lowest toe). Non-root locals `W_parent⁻¹·W_j` are frame-independent. Without the root rule CesiumMan lies on its side (the B1 failure).
 
 fps rule: `.lcharacter` has one fps (30) for every clip. The 120 fps CMU trial is resampled by taking every 4th frame (79 frames). Without it the walk plays four times too slow.
