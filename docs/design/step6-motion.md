@@ -166,6 +166,18 @@ Earlier plan text follows.
 - Normalise each feature by its standard deviation.
 - Match by brute force every 0.1 s, and crossfade over 0.2 s.
 - U6.7 is to grep ludens-core for an existing MotionDB or matcher first.
+Update (2026-11-14, subject 38, branch `feat/motion-subject38`): subject 38 (CMU: walk, run, turns; 120 fps) adds the
+turn material the deviation above lacks. Its trials 38_01 and 38_02 are walks and 38_04 is a walk with frequent turns.
+They enter the matching database in **db mode**: no loop window and no seam check, since a database-only clip never
+wraps (`_clamp` stops at each clip's end). The clip is the first `max` source frames of the trial, where `max` is the
+period range's upper value (38_04 uses 1000 source frames, 250 clip frames, 8.3 s; the whole trial is 2158 frames).
+Each trial uses its own skeleton (the `@asf` suffix). M2, M3 and foot skate are checked in db mode as in loop mode.
+
+The run trial 38_03 (run around in a circle, 120 fps) is **excluded**: its foot skate is 0.181 and 0.190 m/s on 96 and 73
+contact frames (bound 0.15), and the M3 floor check fails. The bound is not tuned to include it. Its window cannot close
+either (a run in a circle changes heading across the window), but the seam is not the reason for exclusion: the skate is.
+So the database has no run; the run requirement of 1.8 stays open.
+
 Recorded deviation (2026-11-14, step 6.3): the design asks for walk, run and turn trials from one subject. Subject 07
 has walk, slow walk and brisk walk only (the CMU search page, subject 7: trials 1 to 12, no run, no turn). The database
 uses 07_01 (walk), 07_04 (slow walk) and 07_12 (brisk walk). Its features separate speed (mean hip speed 0.92, 0.63 and
@@ -184,6 +196,16 @@ ASF, the M1 and M2 checks, and a leg ratio.
 - **M3:** target bone lengths stay within 1e-5 of rest, and foot height stays at or above −0.02 m over the whole clip.
 - **M4 (runtime only):** engine against oracle on 5 frames, joint world positions within 1e-4 m, native and wasm.
 - **M5 (page):** the idle-animation check passes, and the PNG looks like the trial's motion.
+- **M1 femur (revised 2026-11-14):** the lower bound moves from 0.35 m to 0.30 m. The band's purpose is to catch a unit
+  error, which moves a femur by a large factor: the double-unit formula gave 0.157 m for subject 38, and 0.30 m still
+  rejects it. Subject 38's femur is 0.350 m, under the old bound by 0.2 mm, with a rest height of 1.521 m (it passes):
+  a smaller subject, not a scale error. The self-test values are 07_01 0.391 m and 01_01 0.404 m (the earlier note's
+  0.404 m for 07_01 was 01_01's); 38_01 0.350 m. The upper bound and the other M1 checks are unchanged.
+- **Turn check (added 2026-11-14, step 6.3):** the turning rate of a clip is the mean |heading(f+W) - heading(f)| over
+  W = min(30, nf - 1) frames, divided by W / fps. A per-frame difference counted the hip's stride sway: the straight loop
+  clips scored 0.31 to 0.36 rad/s while their net heading change was 0.03 to 0.16 rad. With the one-second window they
+  score 0.03 to 0.08 rad/s, and the turn trial 38_04 scores 0.91 rad/s: 11.6 times the fastest straight walk. Required:
+  at least 3 times (`tests/motion_match_native.mojo`, 23/23).
 - **M6 (MotionDB):** a query built from DB frame k returns k, for 20 values of k. The match index is the same native and wasm.
 
 ### 1.10 PRs
