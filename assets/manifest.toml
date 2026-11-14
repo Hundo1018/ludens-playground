@@ -189,3 +189,27 @@ author = "CMU Graphics Lab Motion Capture Database, subject 38 (trial 4: walk ar
 source_page = "http://mocap.cs.cmu.edu/search.php?subjectnumber=38"
 acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
 changes = "converted by scripts/motion_fk.py to the playground motion format (LMOT v2), as the subject 07 trials: per-frame dof values in degrees, with bonedata and units; no channels added or altered"
+
+[[asset]]
+id = "motion_cmu_16"
+kind = "motion"
+url = "http://mocap.cs.cmu.edu/subjects/16/16.asf"
+file = "16.asf"
+sha256 = "2323f876564610f84bfbec9b90b8ebffb57515673b7f4a45b0fb0849af465bdb"
+license = "CMU-MOCAP"
+author = "CMU Graphics Lab Motion Capture Database, subject 16 (subject 16 (run, jump, walk), skeleton)"
+source_page = "http://mocap.cs.cmu.edu/search.php?subjectnumber=16"
+acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
+changes = "converted by scripts/motion_fk.py to the playground motion format (LMOT v2), as the other CMU trials: per-frame dof values in degrees, with bonedata and units; no channels added or altered"
+
+[[asset]]
+id = "motion_cmu_16_55_run"
+kind = "motion"
+url = "http://mocap.cs.cmu.edu/subjects/16/16_55.amc"
+file = "16_55.amc"
+sha256 = "3a07233c0ce26e213588b409252a9fcbdb81dc0d87bc3e2920cef3bde00b7589"
+license = "CMU-MOCAP"
+author = "CMU Graphics Lab Motion Capture Database, subject 16 (trial 55: run, 120 fps)"
+source_page = "http://mocap.cs.cmu.edu/search.php?subjectnumber=16"
+acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
+changes = "converted by scripts/motion_fk.py to the playground motion format (LMOT v2), as the other CMU trials: per-frame dof values in degrees, with bonedata and units; no channels added or altered"

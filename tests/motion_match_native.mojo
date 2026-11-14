@@ -1,7 +1,8 @@
 # M6 (design 1.9), over the CMU trials the page plays: a query built from database row k returns k, at distance 0, for
 # 20 rows spread over every clip. Also the facing, speed and turn checks per trial. Run natively by
 # scripts/test_frontier_native.sh on build/assets/converted/CesiumMan.lcharacter. Clips: 101 walk 07_01, 102 slow walk
-# 07_04, 103 brisk walk 07_12 (subject 07); 104 walk 38_01, 105 walk 38_02, 106 walk with turns 38_04 (subject 38).
+# 07_04, 103 brisk walk 07_12 (subject 07); 104 walk 38_01, 105 walk 38_02, 106 walk with turns 38_04 (subject 38);
+# 107 run 16_55 (subject 16).
 from std.math import atan2
 from harness.runner import Suite
 from frontier_assets import parse_character
@@ -19,7 +20,7 @@ def read_file(path: String) raises -> List[UInt8]:
 def main() raises:
     var s = Suite("motion_match_native")
     var c = parse_character(read_file("build/assets/converted/CesiumMan.lcharacter"), 101)
-    s.check(len(c.motion) == 6, "six CMU trials in the character: " + String(len(c.motion)))
+    s.check(len(c.motion) == 7, "seven CMU trials in the character: " + String(len(c.motion)))
     var m = build_match(c, c.motion)
     var total = m.rows()
     var frame_counts = List[Int]()
@@ -52,7 +53,7 @@ def main() raises:
     var v_abs = List[Float64]()
     var turn_rate = List[Float64]()
     var row0 = 0
-    for i in range(6):
+    for i in range(7):
         var uu = Float64(0)
         var vv = Float64(0)
         for f in range(frame_counts[i]):
@@ -96,7 +97,7 @@ def main() raises:
         s.check(u_mean[i] > 0.5 and u_mean[i] < 2.5, "subject 38 walk " + String(i) + ": forward speed 0.5 to 2.5 m/s (" + String(u_mean[i]) + ")")
     for i in range(5):
         s.check(v_abs[i] < 0.2 * u_mean[i], "trial " + String(i) + ": sideways drift is small against forward speed")
-    for i in range(6):
+    for i in range(7):
         s.check(Float64(m.tracks[i].min_ground) > 0.05, "trial " + String(i) + ": the facing's ground projection never collapses")
 
     # The turn check: the turn trial turns at least 3x as fast as the fastest straight walk.
@@ -106,6 +107,8 @@ def main() raises:
             straight = turn_rate[i]
     s.check(turn_rate[5] >= 3.0 * straight, "turn trial 38_04 turns at least 3x the straight walks (" + String(turn_rate[5]) + " vs " + String(straight) + " rad/s)")
 
+    # Index 5 is the turn trial (38_04), index 6 the run (16_55): the run is faster than the brisk walk.
+    s.check(u_mean[6] > u_mean[2], "run 16_55 is faster than the brisk walk (" + String(u_mean[6]) + " > " + String(u_mean[2]) + " m/s)")
     var raised = False
     try:
         _ = m.nearest(List[Real]())
