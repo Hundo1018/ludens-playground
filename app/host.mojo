@@ -12,7 +12,9 @@ from hud import Hud
 from render3d import ArenaRenderer
 from app.mesh_pass import MeshRegistry
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
-from frontier_assets import Character, parse_character, parse_ltexture
+from app.skin_gpu import GpuSkinning, SkinJob
+from app.skin_pass import CpuSkinning, Skinning
+from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame
 from geometry.mat import Mat4, transform_point4
 from game.arena import DrawItem
 from wgpu._backend.wgpu_native.types import WGPUTextureAspect
@@ -32,6 +34,20 @@ from wgpu.rendercanvas.input import InputState
 from wgpu.surface import Surface, create_surface_canvas
 from wgpu.texture import Texture
 from wgpu.web.boot import GPUBoot
+
+
+struct B3Job(Movable):
+    """One (character, frame) pair in flight: the CPU result, the GPU job, and the factor from the character's units to
+    metres (the Fox's glTF units are centimetres)."""
+
+    var cpu: List[Vec3]
+    var job: SkinJob
+    var scale: Float64
+
+    def __init__(out self, var cpu: List[Vec3], var job: SkinJob, scale: Float64):
+        self.cpu = cpu^
+        self.job = job^
+        self.scale = scale
 
 
 struct TexReadback(Movable):
@@ -76,6 +92,7 @@ struct Host(Movable):
     var skin_cesium: Int
     var skin_fox: Int
     var tex_job: Optional[TexReadback]
+    var b3_job: Optional[B3Job]
 
     def __init__(out self, selector: String, width: UInt32, height: UInt32) raises:
         self.boot = GPUBoot("playground")
@@ -104,6 +121,7 @@ struct Host(Movable):
         self.skin_cesium = -1
         self.skin_fox = -1
         self.tex_job = None
+        self.b3_job = None
 
     def __init__(out self, *, deinit move: Self):
         self.boot = move.boot^
@@ -132,6 +150,7 @@ struct Host(Movable):
         self.skin_cesium = move.skin_cesium
         self.skin_fox = move.skin_fox
         self.tex_job = move.tex_job^
+        self.b3_job = move.b3_job^
 
     def _draw(mut self, target: WGPUTextureHandle, format: UInt32) raises:
         var aspect = Float32(self.width) / Float32(self.height)
@@ -323,35 +342,6 @@ def playground_host_capture_release(app: UInt64) abi("C"):
         h[].capture.value().unmap()  # the buffer is used again by the next capture: it must not stay mapped
 
 
-def _trs(v: List[Float32], off: Int) -> Mat4:
-    """Translation, quaternion x y z w, scale at v[off .. off+9] (the converter's rest and clip layout), as T * R * S."""
-    var q = Quat(Real(Float64(v[off + 3])), Real(Float64(v[off + 4])), Real(Float64(v[off + 5])), Real(Float64(v[off + 6])))
-    var m = q.to_mat4()
-    for col in range(3):
-        for row in range(3):
-            m.set(row, col, m.get(row, col) * Real(Float64(v[off + 7 + col])))
-    for row in range(3):
-        m.set(row, 3, Real(Float64(v[off + row])))
-    return m^
-
-
-def _locals(v: List[Float32], frame: Int, joints: Int) -> List[Mat4]:
-    var out = List[Mat4]()
-    for j in range(joints):
-        out.append(_trs(v, (frame * joints + j) * 10))
-    return out^
-
-
-def pose_palette(c: Character, clock: Float64) raises -> List[Float32]:
-    """The palette of one character at this clock: the clip sampled at frame floor(clock * fps) (looping), each joint's
-    local from its TRS, then the inverse bind and the root transform (the ancestors the bind matrices exclude)."""
-    var frame = Int(clock * Float64(c.fps)) % c.frames
-    var locals = _locals(c.clip, frame, c.joint_count)
-    var ibm = palette_to_mats(c.ibm)
-    var root = palette_to_mats(c.root)[0].copy()
-    return build_palette_root(locals, c.parents, ibm, root)
-
-
 @export
 def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64) abi("C") -> Int32:
     """A converted asset from the page: 1 CesiumMan.lcharacter, 2 Fox.lcharacter, 3 concrete_wall_008.ltexture. The bytes
@@ -377,8 +367,8 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
 
 
 @export
-def playground_host_skin_check(app: UInt64, which: Int32) abi("C") -> Float64:
-    """B3, engine side: the palette at the rest pose (the rest TRS, no clip), applied to every vertex of a character by
+def playground_host_b1_check(app: UInt64, which: Int32) abi("C") -> Float64:
+    """B1 (design 1.10): the palette at the rest pose (the rest TRS, no clip), applied to every vertex of a character by
     the CPU reference, against root_transform * p. which: 1 CesiumMan, 2 Fox. The largest difference, or -1 if the
     character is not loaded."""
     var h = _host(app)
@@ -388,10 +378,8 @@ def playground_host_skin_check(app: UInt64, which: Int32) abi("C") -> Float64:
         return -1.0
     try:
         var c = h[].cesium.value().copy() if which == 1 else h[].fox.value().copy()
-        var locals = _locals(c.rest, 0, c.joint_count)
-        var ibm = palette_to_mats(c.ibm)
+        var pal = rest_palette(c)
         var root = palette_to_mats(c.root)[0].copy()
-        var pal = build_palette_root(locals, c.parents, ibm, root)
         var rest = List[Vec3]()
         var n = len(c.positions) // 3
         for v in range(n):
@@ -411,7 +399,7 @@ def playground_host_skin_check(app: UInt64, which: Int32) abi("C") -> Float64:
                     worst = d
         return worst
     except e:
-        print("playground_host_skin_check:", e)
+        print("playground_host_b1_check:", e)
         return -2.0
 
 
@@ -511,4 +499,60 @@ def playground_host_texture_result(app: UInt64) abi("C") -> Float64:
         return Float64(worst)
     except e:
         print("playground_host_texture_result:", e)
+        return -2.0
+
+
+@export
+def playground_host_b3_start(app: UInt64, which: Int32, frame: Int32) abi("C") -> Int32:
+    """B3 (design 1.10): start one (character, clip frame) pair. which: 1 CesiumMan, 2 Fox. The CPU reference runs now;
+    the GPU compute job is submitted and collected by playground_host_b3_result. 0 started, -1 not ready."""
+    var h = _host(app)
+    if which == 1 and not h[].cesium:
+        return -1
+    if which == 2 and not h[].fox:
+        return -1
+    try:
+        var c = h[].cesium.value().copy() if which == 1 else h[].fox.value().copy()
+        var pal = pose_palette_frame(c, Int(frame))
+        var rest = List[Vec3]()
+        var n = len(c.positions) // 3
+        for v in range(n):
+            rest.append(Vec3(Real(Float64(c.positions[3 * v])), Real(Float64(c.positions[3 * v + 1])), Real(Float64(c.positions[3 * v + 2])), Real(0)))
+        var joints = _joint_ints(c.joints)
+        var weights = _weights(c.weights)
+        var cpu_skinner = CpuSkinning()
+        var cpu = cpu_skinner.skin(h[].boot.device(), pal, rest, joints, weights)
+        var gpu = GpuSkinning(h[].boot.device())
+        var job = gpu.submit(h[].boot.device(), pal, rest, joints, weights)
+        var scale = 0.01 if which == 2 else 1.0
+        h[].b3_job = B3Job(cpu^, job^, scale)
+        return 0
+    except e:
+        print("playground_host_b3_start:", e)
+        return -1
+
+
+@export
+def playground_host_b3_result(app: UInt64) abi("C") -> Float64:
+    """-1 while the GPU job is pending, -2 if there is none or it failed, else the largest difference between the GPU
+    and the CPU reference over every vertex, in metres."""
+    var h = _host(app)
+    if not h[].b3_job:
+        return -2.0
+    if not h[].b3_job.value().job.ready():
+        return -1.0
+    try:
+        var b = h[].b3_job.take()
+        var gpu = b.job.collect()
+        var worst = 0.0
+        for v in range(len(gpu)):
+            for k in range(3):
+                var d = Float64(b.cpu[v][k] - gpu[v][k])
+                if d < 0.0:
+                    d = -d
+                if d > worst:
+                    worst = d
+        return worst * b.scale
+    except e:
+        print("playground_host_b3_result:", e)
         return -2.0

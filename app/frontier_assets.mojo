@@ -8,7 +8,10 @@ fps.
 Blob kinds (convert_glb.py): 1 positions f32x3, 2 normals f32x3, 3 uv f32x2, 4 joints u16x4, 5 weights f32x4,
 6 indices u32, 7 inverse bind f32x16 (column-major), 8 rest f32x10 (T3 R4 S3, quaternion x y z w), 9 parents i32,
 10 root transform f32x16 (column-major), 100 + k clip k (f32x10 per joint per frame)."""
+from geometry.mat import Mat4
+from geometry.quat import Quat
 from geometry.vec import Real
+from app.skin_pass import build_palette_root, palette_to_mats
 
 
 @fieldwise_init
@@ -147,3 +150,45 @@ def parse_ltexture(b: List[UInt8]) raises -> List[List[UInt8]]:
         levels.append(lvl^)
         pos += nbytes
     return levels^
+
+
+def trs(v: List[Float32], off: Int) -> Mat4:
+    """Translation, quaternion x y z w, scale at v[off .. off+9] (the converter's rest and clip layout), as T * R * S."""
+    var q = Quat(Real(Float64(v[off + 3])), Real(Float64(v[off + 4])), Real(Float64(v[off + 5])), Real(Float64(v[off + 6])))
+    var m = q.to_mat4()
+    for col in range(3):
+        for row in range(3):
+            m.set(row, col, m.get(row, col) * Real(Float64(v[off + 7 + col])))
+    for row in range(3):
+        m.set(row, 3, Real(Float64(v[off + row])))
+    return m^
+
+
+def locals_at(v: List[Float32], frame: Int, joints: Int) -> List[Mat4]:
+    """One local per joint from the frame's 10 floats per joint (frame 0 of the rest list is the rest pose)."""
+    var out = List[Mat4]()
+    for j in range(joints):
+        out.append(trs(v, (frame * joints + j) * 10))
+    return out^
+
+
+def pose_palette_frame(c: Character, frame: Int) raises -> List[Float32]:
+    """The palette of one character at a clip frame: each joint's local from its TRS, then the inverse bind and the
+    root transform (the ancestors the bind matrices exclude)."""
+    var locals = locals_at(c.clip, frame, c.joint_count)
+    var ibm = palette_to_mats(c.ibm)
+    var root = palette_to_mats(c.root)[0].copy()
+    return build_palette_root(locals, c.parents, ibm, root)
+
+
+def pose_palette(c: Character, clock: Float64) raises -> List[Float32]:
+    """The palette at a clock: the clip sampled at frame floor(clock * fps), looping."""
+    return pose_palette_frame(c, Int(clock * Float64(c.fps)) % c.frames)
+
+
+def rest_palette(c: Character) raises -> List[Float32]:
+    """The palette at the rest pose (the rest TRS, no clip): B1 applies it to the rest positions."""
+    var locals = locals_at(c.rest, 0, c.joint_count)
+    var ibm = palette_to_mats(c.ibm)
+    var root = palette_to_mats(c.root)[0].copy()
+    return build_palette_root(locals, c.parents, ibm, root)

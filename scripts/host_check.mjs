@@ -82,11 +82,28 @@ if (hub && moved) { const n = differ(hub, moved); need(n > 5000, `holding W and 
 // the converted assets: both characters and the wall are on the page before the character checks
 for (let i = 0; i < 400; i++) { if ((await js('window.host && window.host.assets')) >= 3) break; await sleep(100); }
 need((await js('window.host && window.host.assets')) === 3, 'the page loads the three converted assets (both characters, the wall)');
-// B3, engine side: the palette at the rest pose, applied by the CPU reference, against root_transform * p (< 1e-4)
+// B1 (design 1.10): the rest-pose palette, applied by the CPU reference, against root_transform * p (< 1e-4)
 for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
-  const err = await js(`window.host.x.playground_host_skin_check(window.host.app, ${which})`);
+  const err = await js(`window.host.x.playground_host_b1_check(window.host.app, ${which})`);
   console.log(`${name} rest pose: max |palette * p - root_transform * p| = ${err}`);
-  need(err >= 0 && err < 1e-4, `B3: the ${name} rest pose reproduces root_transform * p (max error ${err})`);
+  need(err >= 0 && err < 1e-4, `B1: the ${name} rest pose reproduces root_transform * p (max error ${err})`);
+}
+// B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
+// Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.
+const b3Cases = [[1, 0], [1, 15], [1, 30], [1, 45], [1, 60], [2, 0], [2, 11], [2, 22]];
+for (const [which, frame] of b3Cases) {
+  const name = which === 1 ? 'CesiumMan' : 'Fox';
+  const started = await js(`window.host.x.playground_host_b3_start(window.host.app, ${which}, ${frame})`);
+  let err = -1;
+  if (started === 0) {
+    for (let i = 0; i < 400; i++) {
+      err = await js('window.host.x.playground_host_b3_result(window.host.app)');
+      if (err !== -1) break;
+      await sleep(25);
+    }
+  }
+  console.log(`B3 ${name} frame ${frame}: max |GPU - CPU| = ${err} m`);
+  need(started === 0 && err >= 0 && err < 1e-3, `B3: ${name} frame ${frame}, every vertex GPU against CPU below 1e-3 m (max ${err} m)`);
 }
 // the characters animate with no input: the picture changes between frame 30 and frame 60
 for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 30) break; await sleep(100); }
