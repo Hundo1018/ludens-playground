@@ -7,6 +7,8 @@ import { loadAsset, stageAsset } from "./assets.mjs";
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("canvas");
+// ?w=&h= sets the canvas size (the step 7 measurement is taken at 1280 x 720; the default stays as in index.html).
+if (params.has("w") && params.has("h")) { canvas.width = Number(params.get("w")); canvas.height = Number(params.get("h")); }
 const stats = (window.host = { frames: 0, error: "", frameMs: 0, app: 0n, rt: null, x: null, assets: 0 });
 
 // The page's converted assets, by file name: the kind playground_host_asset expects (see app/host.mojo).
@@ -47,13 +49,39 @@ async function boot() {
   const rt = await instantiate(bytes, { libs: [() => ({ env: wgpuImports(wrt) })] });
   wrt.attach(rt);
   const x = rt.exports;
-  stats.rt = rt; stats.x = x;
+  stats.rt = rt; stats.x = x; stats.wrt = wrt; // wrt: the WebGPU runtime (its handles hold the GPUQueue)
   const [sel, len] = rt.str_in("#" + canvas.id);
   const app = x.playground_host_init(sel, len, canvas.width, canvas.height);
   if (app === 0n) throw new Error("playground_host_init failed");
   stats.app = app;
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
+  if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
+  if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
+  // the HUD's netcode check (step 8): the lossy session (latency 4, jitter 3, 10 % loss) on the page's wasm, shown as
+  // text. The value is the reference hash (mod 1000000007); native prints the same. -1 would mean a peer did not converge.
+  const netBtn = document.getElementById("net");
+  if (netBtn) netBtn.onclick = () => {
+    const code = x.playground_host_net_check();
+    const out = document.getElementById("netout");
+    if (out) out.textContent = code === 765407476 ? "converged (" + code + ", equal to native)" : "not converged (code " + code + ")";
+  };
+  // the HUD's crowd toggle (step 7): 64 ecs members walking to the centre, or none. Off by default: the measured frame
+  // time on this machine is already over the 16.7 ms budget (docs/design/step7-crowd.md), so the crowd is opt-in.
+  const crowdBtn = document.getElementById("crowd");
+  let crowdOn = false;
+  if (crowdBtn) crowdBtn.onclick = () => {
+    crowdOn = !crowdOn;
+    const rc = x.playground_host_crowd(app, crowdOn ? 64 : 0);
+    if (rc < 0) crowdOn = false;
+    crowdBtn.textContent = "crowd: " + (crowdOn ? "64" : "off");
+  };
+  // the HUD's backend switch (step 7): flips the live ecs backend of the crowd and relabels the button
+  const backendBtn = document.getElementById("backend");
+  if (backendBtn) backendBtn.onclick = () => {
+    const now = x.playground_host_crowd_switch(app);
+    if (now >= 0) backendBtn.textContent = "crowd backend: " + (now === 1 ? "naive" : "sparse-set");
+  };
 
   const key = (e, action) => {
     const code = KEYS[e.code];

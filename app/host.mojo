@@ -15,6 +15,9 @@ from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
 from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame
+from motion_match import build_match, m6_hash
+from net_frontier import run_session
+from crowd import CrowdState, CrowdRow
 from geometry.mat import Mat4, transform_point4
 from game.arena import DrawItem
 from wgpu._backend.wgpu_native.types import WGPUTextureAspect
@@ -83,6 +86,7 @@ struct Host(Movable):
     var capture_ptr: UInt64
     var want_capture: Bool
     var offscreen: Bool
+    var bench_draw: Bool  # step 7 timing: draw every frame into the offscreen target, no readback
     var frame_ms: Float32
     var cesium: Optional[Character]
     var fox: Optional[Character]
@@ -91,6 +95,7 @@ struct Host(Movable):
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
     var skin_cesium: Int
     var skin_fox: Int
+    var crowd: Optional[CrowdState]  # the crowd of step 7 (ecs entities, flow field), None until asked for
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
 
@@ -112,6 +117,7 @@ struct Host(Movable):
         self.capture_ptr = 0
         self.want_capture = False
         self.offscreen = False
+        self.bench_draw = False
         self.frame_ms = 0
         self.cesium = None
         self.fox = None
@@ -120,6 +126,7 @@ struct Host(Movable):
         self.placed = False
         self.skin_cesium = -1
         self.skin_fox = -1
+        self.crowd = None
         self.tex_job = None
         self.b3_job = None
 
@@ -141,6 +148,7 @@ struct Host(Movable):
         self.capture_ptr = move.capture_ptr
         self.want_capture = move.want_capture
         self.offscreen = move.offscreen
+        self.bench_draw = move.bench_draw
         self.frame_ms = move.frame_ms
         self.cesium = move.cesium^
         self.fox = move.fox^
@@ -149,6 +157,7 @@ struct Host(Movable):
         self.placed = move.placed
         self.skin_cesium = move.skin_cesium
         self.skin_fox = move.skin_fox
+        self.crowd = move.crowd^
         self.tex_job = move.tex_job^
         self.b3_job = move.b3_job^
 
@@ -198,6 +207,19 @@ struct Host(Movable):
         var fox_base = c.joint_count
         var pal_fox = pose_palette(f, self.clock)
         pal.extend(pal_fox^)
+        # crowd (step 7): the live backend's members, each at its own clip phase, one palette each after the two above.
+        # The palette is a list of floats, 16 per matrix; pose_id is a matrix index.
+        var crowd_rows = List[CrowdRow]()
+        var crowd_bases = List[Int]()
+        if self.crowd:
+            var cs = self.crowd.take()
+            cs.step(Real(1.0 / 60.0))
+            crowd_rows = cs.positions()
+            self.crowd = cs^
+            for r in crowd_rows:
+                var fr = (Int(self.clock * Float64(c.fps)) + r.offset) % c.frames
+                crowd_bases.append(len(pal) // 16)
+                pal.extend(pose_palette_frame(c, fr))
         self.renderer.value().skin_palette = pal^
         # six units ahead of the eye, 1.5 to either side, feet on the ground (y = 0)
         var ahead = Float64(6.0)
@@ -221,6 +243,15 @@ struct Host(Movable):
             Vec3(Real(0.01), Real(0.01), Real(0.01), Real(0.0)), Vec3(Real(0.9), Real(0.85), Real(0.7), Real(0.0)),
             self.skin_fox, fox_base, 0,
         ))
+        # the crowd: each member at its position on the floor (the flow field's), feet on the ground
+        for k in range(len(crowd_rows)):
+            var r = crowd_rows[k]
+            var pos = Vec3(Real(r.x), Real(0.0), Real(r.z), Real(0.0))
+            self.renderer.value().push(DrawItem(
+                -1, pos, 0.0, 0.0, 0.0, 1.0,
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.6), Real(0.75), Real(0.9), Real(0.0)),
+                self.skin_cesium, crowd_bases[k], 0,
+            ))
 
     def _capture(mut self, format: UInt32) raises:
         if self.want_capture and not self.capture_req:
@@ -259,6 +290,18 @@ struct Host(Movable):
             return 0
         if self.offscreen:
             # Never touch the canvas: headless Chrome loses the device after a canvas draw.
+            if self.bench_draw:
+                # Timing (step 7): the whole scene is drawn into the target every frame; no readback.
+                if not self.capture_target:
+                    self.capture_target = self.boot.device().create_texture(
+                        self.width, self.height, 1, WGPUTextureFormat.RGBA8Unorm,
+                        WGPUTextureUsage.RENDER_ATTACHMENT | WGPUTextureUsage.COPY_SRC,
+                        label="bench_target",
+                    )
+                self._draw(self.capture_target.value().handle().raw, WGPUTextureFormat.RGBA8Unorm)
+                self._capture(WGPUTextureFormat.RGBA8Unorm)  # a requested capture still works in this mode
+                self._finish_capture()
+                return 1
             self._capture(WGPUTextureFormat.RGBA8Unorm)
             self._finish_capture()
             return 1
@@ -319,6 +362,12 @@ def playground_host_offscreen(app: UInt64, on: Int32) abi("C"):
 
 
 @export
+def playground_host_bench_draw(app: UInt64, on: Int32) abi("C"):
+    """Step 7 timing: with offscreen, draw every frame into the target (no readback), so the frame time includes the draw."""
+    _host(app)[].bench_draw = on != 0
+
+
+@export
 def playground_host_request_capture(app: UInt64) abi("C"):
     _host(app)[].want_capture = True
 
@@ -364,6 +413,75 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
     except e:
         print("playground_host_asset:", e)
         return -1
+
+
+@export
+def playground_host_motion_hash(app: UInt64) abi("C") -> Int32:
+    """M6 (design 1.9): the hash of the indices the 20 query frames return in CesiumMan's clip (motion_match.m6_hash).
+    -1: the character is not loaded. -2: the matching failed (printed)."""
+    var h = _host(app)
+    if not h[].cesium:
+        return -1
+    try:
+        var c = h[].cesium.value().copy()
+        var m = build_match(c, c.motion)
+        return Int32(m6_hash(m))
+    except e:
+        print("playground_host_motion_hash:", e)
+        return -2
+
+
+@export
+def playground_host_net_check() abi("C") -> Int32:
+    """Step 8 (netcode): the Frontier's session over SnapshotServer and SnapshotClient through a lossy SimLink (jitter 3,
+    10 % loss), in the page's wasm. Returns the reference hash (mod 1000000007) when every client reaches tick 120 and
+    every client and the server equal it; -1 otherwise. tests/frontier_net_native.mojo prints the same number."""
+    try:
+        var r = run_session(4, 3, Real(0.1), UInt64(2026), 120)
+        if r[0] and r[1]:
+            return Int32(r[2])
+        return -1
+    except e:
+        print("playground_host_net_check:", e)
+        return -2
+
+
+@export
+def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
+    """Step 7: a crowd of n members (0 removes it): ecs entities in both backends, moved by the flow field, drawn as
+    skinned CesiumMan. Returns n, -1 if n is out of range, -2 if the crowd could not be built (printed). A crowd too big
+    for the palette fails in the frame, not here (the engine's limit is 4096 matrices; docs/design/step7-crowd.md)."""
+    var h = _host(app)
+    if n < 0 or n > 400:
+        return -1
+    if n == 0:
+        h[].crowd = None
+        return 0
+    try:
+        h[].crowd = CrowdState(Int(n))
+        return n
+    except e:
+        print("playground_host_crowd:", e)
+        return -2
+
+
+@export
+def playground_host_crowd_switch(app: UInt64) abi("C") -> Int32:
+    """The HUD's backend switch: flips the live backend of the crowd and returns 1 for the naive backend, 0 for the
+    sparse-set one; -1 if there is no crowd."""
+    var h = _host(app)
+    if not h[].crowd:
+        return -1
+    var cs = h[].crowd.take()
+    try:
+        cs.switch()
+    except e:
+        print("playground_host_crowd_switch:", e)
+        h[].crowd = cs^
+        return -2
+    var naive = 1 if cs.use_naive else 0
+    h[].crowd = cs^
+    return Int32(naive)
 
 
 @export

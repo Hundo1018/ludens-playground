@@ -88,6 +88,22 @@ for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
   console.log(`${name} rest pose: max |palette * p - root_transform * p| = ${err}`);
   need(err >= 0 && err < 1e-4, `B1: the ${name} rest pose reproduces root_transform * p (max error ${err})`);
 }
+// M6 (design 1.9): the 20 query frames of CesiumMan's clip return their own frames; the hash of the matched indices is
+// the value tests/motion_match_native.mojo prints (437896, three CMU trials). Native and wasm must agree on it.
+const M6_NATIVE_HASH = 437896;
+const m6 = await js('window.host.x.playground_host_motion_hash(window.host.app)');
+console.log(`M6 motion-match hash on the page: ${m6} (native ${M6_NATIVE_HASH})`);
+need(m6 === M6_NATIVE_HASH, `M6: the page's motion matching returns the same 20 indices as native (hash ${m6})`);
+// Step 8 (netcode): the session over SnapshotServer / SnapshotClient through a lossy link reaches tick 120 on every
+// peer, and every peer's hash equals the reference. The value is the reference hash; native prints the same (765407476).
+const NET_NATIVE = 765407476;
+const net = await js('window.host.x.playground_host_net_check()');
+console.log(`netcode session on the page: ${net} (native ${NET_NATIVE})`);
+need(net === NET_NATIVE, `netcode: the page's session converges and equals native (code ${net})`);
+// the HUD's netcode button shows the same result as text on the page
+await js("document.getElementById('net').click()");
+const netText = await js("document.getElementById('netout').textContent");
+need(typeof netText === 'string' && netText.startsWith('converged'), `netcode HUD: the button shows the result on the page ("${netText}")`);
 // B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
 // Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.
 // CesiumMan's clip is the 33-frame walk (kind 101); the Fox's is its Walk clip (23 frames)
@@ -126,5 +142,13 @@ need(texErr === 0, `C2: the GPU's mip 0 and mip 4 of layer 1 equal the converted
 const pageError = await js('window.host.error');
 console.log('page error:', JSON.stringify(pageError));
 need(pageError === '', 'no page error');
+// Step 7 (crowd): a 20-member crowd is built, its backend switch flips sparse-set -> naive -> sparse-set, and it is
+// removed. The switch returns the live backend (1 naive, 0 sparse-set), so the three values are checked in order.
+const crowdN = await js('window.host.x.playground_host_crowd(window.host.app, 20)');
+need(crowdN === 20, `crowd: 20 members are built (code ${crowdN})`);
+const sw1 = await js('window.host.x.playground_host_crowd_switch(window.host.app)');
+const sw2 = await js('window.host.x.playground_host_crowd_switch(window.host.app)');
+need(sw1 === 1 && sw2 === 0, `crowd: the backend switch goes naive (${sw1}) then sparse-set (${sw2})`);
+need((await js('window.host.x.playground_host_crowd(window.host.app, 0)')) === 0, 'crowd: removed');
 console.log(problems.length ? `host-check: FAIL\n  ${problems.join('\n  ')}` : 'host-check: PASS');
 done(problems.length ? 1 : 0);

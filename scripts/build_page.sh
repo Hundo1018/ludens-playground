@@ -20,8 +20,12 @@ cp build/deps/ludens-engine/shell/web/assets.mjs "$OUT/"  # the engine's loader:
 python3 scripts/fetch_assets.py
 CONV=build/assets/converted
 rm -rf "$CONV" && mkdir -p "$CONV" "$OUT/assets"
-# CesiumMan carries the rest clip (kind 100) and the CMU walk, retargeted in place (kind 101, step 6.2)
-python3 scripts/retarget.py build/assets/src/CesiumMan.glb build/assets/src/07.asf build/assets/src/07_01.amc "$CONV/CesiumMan.lcharacter"
+# CesiumMan carries the rest clip (kind 100) and three CMU subject-07 trials, retargeted in place: walk (101, step 6.2),
+# slow walk (102), brisk walk (103). The slow walk uses the seam criterion for its loop window (retarget.py, step 6.3).
+python3 scripts/retarget.py --clips "$CONV/CesiumMan.lcharacter" build/assets/src/CesiumMan.glb build/assets/src/07.asf \
+  "cmu07_walk=build/assets/src/07_01.amc" "cmu07_slow_walk=build/assets/src/07_04.amc:100:260:r" "cmu07_brisk_walk=build/assets/src/07_12.amc"
+python3 scripts/retarget.py --check-clips "$CONV/CesiumMan.lcharacter" build/assets/src/CesiumMan.glb build/assets/src/07.asf \
+  "cmu07_walk=build/assets/src/07_01.amc" "cmu07_slow_walk=build/assets/src/07_04.amc:100:260:r" "cmu07_brisk_walk=build/assets/src/07_12.amc"
 python3 scripts/convert_glb.py build/assets/src/Fox.glb "$CONV/Fox.lcharacter"
 python3 scripts/convert_texture.py build/assets/src/concrete_wall_008_diff_1k.jpg "$CONV/concrete_wall_008.ltexture"
 # the page ships these three; nothing else in the converted directory
