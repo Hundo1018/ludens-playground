@@ -57,3 +57,4 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 - CI: `.github/workflows/pages.yml` is the only workflow. It checks the asset manifest and credits, builds the page
   against the pinned engine, plays it headless, checks native against wasm, and deploys from main. The engine's pixi
   environment is used as is, through its manifest path; the playground has no pixi manifest of its own.
+- Town crowd purpose (2026-11-14): the residents walk between the four street corners of card 3 of `docs/frontier_plan.md`, with a guard that closes on the player. Chosen from that card, not asked; the user can redirect it.
