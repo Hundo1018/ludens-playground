@@ -32,6 +32,16 @@ jobs:
           environments: wasm
       - name: Build build/page
         run: pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/build_page.sh
+      - name: Install Mesa lavapipe (software Vulkan) for the native harness
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libvulkan1
+          LVP_ICD=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
+          echo "VK_ICD_FILENAMES=$LVP_ICD" >> "$GITHUB_ENV"
+          echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+      - name: "Native harness: B1 (CPU) and B3 (GPU against CPU, per vertex) on lavapipe"
+        run: pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/test_frontier_native.sh --require-gpu
       - name: Play the page in headless Chrome, served without COOP/COEP
         run: |
           mkdir -p build/shots
