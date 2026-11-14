@@ -91,6 +91,7 @@ struct Host(Movable):
     var frame_ms: Float32
     var cesium: Optional[Character]
     var fox: Optional[Character]
+    var fox_clips: List[Character]  # the Fox's Survey (100), Walk (101) and Run (102) from the same file, in that order
     var wall: Optional[List[List[UInt8]]]
     var clock: Float64  # seconds of animation, advanced per frame
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
@@ -123,6 +124,7 @@ struct Host(Movable):
         self.frame_ms = 0
         self.cesium = None
         self.fox = None
+        self.fox_clips = List[Character]()
         self.wall = None
         self.clock = 0.0
         self.placed = False
@@ -155,6 +157,7 @@ struct Host(Movable):
         self.frame_ms = move.frame_ms
         self.cesium = move.cesium^
         self.fox = move.fox^
+        self.fox_clips = move.fox_clips^
         self.wall = move.wall^
         self.clock = move.clock
         self.placed = move.placed
@@ -209,7 +212,10 @@ struct Host(Movable):
         var f = self.fox.value().copy()
         var pal = pose_palette(c, self.clock)
         var fox_base = c.joint_count
-        var pal_fox = pose_palette(f, self.clock)
+        # the Fox cycles Survey, Walk, Run every 4 s (the same skeleton and mesh; only the clip changes)
+        var sel = Int(self.clock / 4.0) % 3
+        var fx = self.fox_clips[sel].copy() if len(self.fox_clips) == 3 else f.copy()
+        var pal_fox = pose_palette(fx, self.clock)
         pal.extend(pal_fox^)
         # crowd (step 7): the live backend's members, each at its own clip phase, one palette each after the two above.
         # The palette is a list of floats, 16 per matrix; pose_id is a matrix index.
@@ -430,6 +436,10 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
             h[].cesium = parse_character(bytes, 101)  # the CMU walk, retargeted in place (step 6.2)
         elif kind == 2:
             h[].fox = parse_character(bytes, 101)  # the Walk clip: the converter writes Survey 100, Walk 101, Run 102
+            h[].fox_clips = List[Character]()
+            h[].fox_clips.append(parse_character(bytes, 100))
+            h[].fox_clips.append(parse_character(bytes, 101))
+            h[].fox_clips.append(parse_character(bytes, 102))
         elif kind == 3:
             h[].wall = parse_ltexture(bytes)
         else:
