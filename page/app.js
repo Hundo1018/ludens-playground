@@ -65,7 +65,8 @@ async function boot() {
     ],
   };
   const padKey = (code, down) => x.playground_host_input(app, EV_KEY, code, down ? ACTION_PRESS : ACTION_RELEASE, 0, 0, 0);
-  stats.pad = mountVirtualPad(canvas, PAD, { key: padKey, look() {}, lookEnd() {} });
+  // The pad shows itself on a coarse pointer (a phone); ?pad forces it on, for the headless touch check.
+  stats.pad = mountVirtualPad(canvas, PAD, { key: padKey, look() {}, lookEnd() {} }, params.has("pad"));
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
   if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
