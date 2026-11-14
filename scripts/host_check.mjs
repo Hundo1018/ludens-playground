@@ -138,5 +138,13 @@ need(texErr === 0, `C2: the GPU's mip 0 and mip 4 of layer 1 equal the converted
 const pageError = await js('window.host.error');
 console.log('page error:', JSON.stringify(pageError));
 need(pageError === '', 'no page error');
+// Step 7 (crowd): a 20-member crowd is built, its backend switch flips sparse-set -> naive -> sparse-set, and it is
+// removed. The switch returns the live backend (1 naive, 0 sparse-set), so the three values are checked in order.
+const crowdN = await js('window.host.x.playground_host_crowd(window.host.app, 20)');
+need(crowdN === 20, `crowd: 20 members are built (code ${crowdN})`);
+const sw1 = await js('window.host.x.playground_host_crowd_switch(window.host.app)');
+const sw2 = await js('window.host.x.playground_host_crowd_switch(window.host.app)');
+need(sw1 === 1 && sw2 === 0, `crowd: the backend switch goes naive (${sw1}) then sparse-set (${sw2})`);
+need((await js('window.host.x.playground_host_crowd(window.host.app, 0)')) === 0, 'crowd: removed');
 console.log(problems.length ? `host-check: FAIL\n  ${problems.join('\n  ')}` : 'host-check: PASS');
 done(problems.length ? 1 : 0);

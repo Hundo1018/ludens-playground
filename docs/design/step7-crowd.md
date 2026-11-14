@@ -3,7 +3,36 @@
 Source: `docs/PLAN.md` step 7 ("Entities through `ecs.World`, flow field for movement, instanced skinned draws, HUD switch
 between backends. Count from a measured budget, not a promise.").
 
-## What exists now (verified)
+## Status (2026-11-14, after the ECS and flow-field change)
+
+Built:
+
+- `app/crowd.mojo`: members are ecs entities (`CrowdPos`, `CrowdPhase`) in both `SparseSetBackend` and `NaiveBackend` worlds;
+  the live one is stepped and drawn; the switch rebuilds the other from the live world.
+- Movement: the engine's `FlowField` (ludens-core `nav/path.mojo`) over a navmesh baked from the arena's floor (the arena's
+  settings), goal at the centre, members stop within 0.6 m. One `FlowField.build` per crowd; `direction` per member per tick.
+- `tests/crowd_native.mojo`: 5/5. Members walk toward the goal (mean distance drops by over 1 m in 300 ticks); the two
+  backends agree exactly after 300 ticks; a switch at tick 150 leaves the result unchanged.
+- Page: a HUD button flips the live backend (`playground_host_crowd_switch`); `host_check` builds 20 members, switches
+  naive then sparse-set, and removes them.
+
+Re-measured with ECS and flow-field movement (same bench, 30 samples per count):
+
+| extra instances | median frame ms | p90 ms |
+|---:|---:|---:|
+| 0 | 16.70 | 17.10 |
+| 16 | 16.90 | 18.10 |
+| 64 | 16.70 | 17.60 |
+| 128 | 16.40 | 19.40 |
+| 160 | 16.50 | 19.20 |
+| 192 | 16.40 | 18.20 |
+| 213 | 16.70 | 17.10 |
+
+The medians sit at the 60 Hz clock at every count, within the sampling noise, so the median cannot separate them.
+The p90 rises to 18 to 19 ms from 128 instances. The budget stays at **160** (the largest count tested with median 16.5 ms
+and the lowest p90 among the large counts that hold the median). The ECS and flow-field cost is inside these numbers.
+
+## What exists now (verified, before the ECS change)
 
 - `ecs.World[B: StorageBackend]` (ludens-core `ecs/world.mojo:35`): `spawn`, `despawn`, `set`, `get`, `has`, `remove`,
   `query1`..`query3`, `for_each2`, `for_each3`, `changed` and `added` (change ticks), resources, `storage_bytes`.

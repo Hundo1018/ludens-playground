@@ -57,6 +57,12 @@ async function boot() {
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
   if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
+  // the HUD's backend switch (step 7): flips the live ecs backend of the crowd and relabels the button
+  const backendBtn = document.getElementById("backend");
+  if (backendBtn) backendBtn.onclick = () => {
+    const now = x.playground_host_crowd_switch(app);
+    if (now >= 0) backendBtn.textContent = "crowd backend: " + (now === 1 ? "naive" : "sparse-set");
+  };
 
   const key = (e, action) => {
     const code = KEYS[e.code];
