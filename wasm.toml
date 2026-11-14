@@ -1,0 +1,12 @@
+# Passive manifest read by ludens-wasm-rt's build driver, for both targets (see scripts/build_wasm.sh).
+# The engine's manifest is the model: the same [native] archives, so the native target matches the wasm numbers.
+[lib]
+name = "ludens-playground"
+include = ["app"]
+js = "build/deps/ludens-engine/shell/web/net_host.mjs"
+host_imports = ["net_*", "os_*"]
+
+[native]
+static_libs = ["build/libwasmrt_math.a", "build/deps/miniaudio-mojo/build/libma_shim.a"]
+link_flags = ["-lm", "-lpthread", "-ldl", "-latomic"]
+mojo_defines = ["MINIAUDIO_LINK=static"]
