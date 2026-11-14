@@ -29,6 +29,7 @@ from wgpu._backend.wgpu_native.alloc_guard import raw_alloc
 from wgpu._ffi.types import WGPUBufferUsage
 from geometry.quat import Quat
 from geometry.vec import Real, Vec3
+from std.math import atan2, cos, sin
 from wgpu._backend.wgpu_native.alloc_guard import raw_alloc
 from wgpu._ffi.types import WGPUTextureFormat, WGPUTextureHandle, WGPUTextureUsage
 from wgpu.buffer import MapRequest
@@ -250,10 +251,12 @@ struct Host(Movable):
             Real(Float64(view.eye[0]) + Float64(view.fwd[0]) * ahead - Float64(view.right[0]) * side), Real(0.0),
             Real(Float64(view.eye[2]) + Float64(view.fwd[2]) * ahead - Float64(view.right[2]) * side), Real(0.0),
         )
-        var fs = Vec3(
-            Real(Float64(view.eye[0]) + Float64(view.fwd[0]) * ahead + Float64(view.right[0]) * side), Real(0.0),
-            Real(Float64(view.eye[2]) + Float64(view.fwd[2]) * ahead + Float64(view.right[2]) * side), Real(0.0),
-        )
+        # the Fox walks a circle of radius 6 m round the hub's centre and faces its direction of travel (a yaw about +Y;
+        # the glTF model faces +Z)
+        var ang = self.clock * 0.25
+        var fpos = Vec3(Real(6.0 * cos(ang)), Real(0.0), Real(6.0 * sin(ang)), Real(0.0))
+        var heading = atan2(-sin(ang), cos(ang))
+        var half_h = heading * 0.5
         self.renderer.value().push(DrawItem(
             -1, cs, 0.0, 0.0, 0.0, 1.0,
             Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.85), Real(0.7), Real(0.6), Real(0.0)),
@@ -261,7 +264,7 @@ struct Host(Movable):
         ))
         # the Fox's glTF units are centimetres: 78.9 units tall, so scale 0.01 gives 0.79 m (U10)
         self.renderer.value().push(DrawItem(
-            -1, fs, 0.0, 0.0, 0.0, 1.0,
+            -1, fpos, 0.0, sin(half_h), 0.0, cos(half_h),
             Vec3(Real(0.01), Real(0.01), Real(0.01), Real(0.0)), Vec3(Real(0.9), Real(0.85), Real(0.7), Real(0.0)),
             self.skin_fox, fox_base, 0,
         ))
