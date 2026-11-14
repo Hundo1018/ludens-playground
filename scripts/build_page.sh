@@ -10,11 +10,12 @@ rm -rf "$OUT" build/page-build && mkdir -p "$OUT" build/page-build
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
   -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
-  -I build/deps/ludens-engine -I build/deps/ludens-engine/app -I . \
+  -I build/deps/ludens-engine -I build/deps/ludens-engine/app -I . -I app \
   app/host.mojo -o build/page-build/host.wasm --export 'playground_host_*'
 # the compiler writes its intermediates (.ll, .bc, .o) next to the output: keep them out of the uploaded page
 cp build/page-build/host.wasm "$OUT/host.wasm"
 cp page/index.html page/app.js "$OUT/"
+cp build/deps/ludens-engine/shell/web/assets.mjs "$OUT/"  # the engine's loader: sha256 check, size cap, copy into wasm
 # assets: fetched and verified against the manifest, converted to the engine's binary formats, then indexed
 python3 scripts/fetch_assets.py
 CONV=build/assets/converted

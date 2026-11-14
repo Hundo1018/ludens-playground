@@ -79,6 +79,32 @@ await sleep(2500);
 await key('keyup', 'KeyD'); await key('keyup', 'KeyW');
 const moved = await grab('moved');
 if (hub && moved) { const n = differ(hub, moved); need(n > 5000, `holding W and D changed the picture (${n} pixels)`); }
+// the converted assets: both characters and the wall are on the page before the character checks
+for (let i = 0; i < 400; i++) { if ((await js('window.host && window.host.assets')) >= 3) break; await sleep(100); }
+need((await js('window.host && window.host.assets')) === 3, 'the page loads the three converted assets (both characters, the wall)');
+// B3, engine side: the palette at the rest pose, applied by the CPU reference, against root_transform * p (< 1e-4)
+for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
+  const err = await js(`window.host.x.playground_host_skin_check(window.host.app, ${which})`);
+  console.log(`${name} rest pose: max |palette * p - root_transform * p| = ${err}`);
+  need(err >= 0 && err < 1e-4, `B3: the ${name} rest pose reproduces root_transform * p (max error ${err})`);
+}
+// the characters animate with no input: the picture changes between frame 30 and frame 60
+for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 30) break; await sleep(100); }
+const idle30 = await grab('idle30');
+for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 60) break; await sleep(100); }
+const idle60 = await grab('idle60');
+if (idle30 && idle60) { const n = differ(idle30, idle60); need(n > 500, `idle: the picture changes between frame 30 and frame 60 (${n} pixels), so the characters animate`); }
+// C2, on the page: the wall texture's mip 0 and mip 4 read back from the GPU equal the converted levels exactly
+const texStarted = await js('window.host.x.playground_host_texture_start(window.host.app)');
+need(texStarted === 0, 'C2: the texture readback starts once the wall is on the renderer');
+let texErr = -1;
+for (let i = 0; i < 400; i++) {
+  texErr = await js('window.host.x.playground_host_texture_result(window.host.app)');
+  if (texErr !== -1) break;
+  await sleep(25);
+}
+console.log(`wall texture readback: max channel difference from the converted levels = ${texErr}`);
+need(texErr === 0, `C2: the GPU's mip 0 and mip 4 of layer 1 equal the converted levels (max difference ${texErr})`);
 const pageError = await js('window.host.error');
 console.log('page error:', JSON.stringify(pageError));
 need(pageError === '', 'no page error');
