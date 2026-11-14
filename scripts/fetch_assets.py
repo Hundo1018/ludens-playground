@@ -69,14 +69,34 @@ def sha256_of(path: pathlib.Path) -> str:
     return h.hexdigest()
 
 
+FETCH_ATTEMPTS = 4
+
+
 def fetch(entry: dict) -> pathlib.Path:
+    """Download to a temporary file, then rename: an interrupted transfer never leaves a file that a later run would
+    take as complete. Retries with backoff (2, 4, 8 s): the CMU host failed name resolution once on the runner."""
+    import time
     SRC.mkdir(parents=True, exist_ok=True)
     dest = SRC / entry["file"]
-    if not dest.exists():
-        req = urllib.request.Request(entry["url"], headers={"User-Agent": "ludens-playground-assets"})
-        with urllib.request.urlopen(req, timeout=120) as r, dest.open("wb") as f:
-            while chunk := r.read(1 << 20):
-                f.write(chunk)
+    if dest.exists():
+        return dest
+    tmp = dest.with_name(dest.name + ".part")
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            req = urllib.request.Request(entry["url"], headers={"User-Agent": "ludens-playground-assets"})
+            with urllib.request.urlopen(req, timeout=120) as r, tmp.open("wb") as f:
+                while chunk := r.read(1 << 20):
+                    f.write(chunk)
+            tmp.replace(dest)
+            return dest
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            if tmp.exists():
+                tmp.unlink()
+            if attempt == FETCH_ATTEMPTS:
+                raise
+            wait = 2 ** attempt
+            print(f"retry {entry['id']} (attempt {attempt} failed: {e}); waiting {wait} s")
+            time.sleep(wait)
     return dest
 
 
