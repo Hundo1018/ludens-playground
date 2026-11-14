@@ -64,7 +64,7 @@ async function boot() {
       { id: "reset", key: 82, label: "R", size: 56, at: { right: 124, bottom: 24 } },
     ],
   };
-  const padKey = (code, down) => x.playground_host_input(app, EV_KEY, code, down ? ACTION_PRESS : ACTION_RELEASE, 0, 0, 0);
+  const padKey = (code, down) => { (stats.padLog ||= []).push([code, down]); return x.playground_host_input(app, EV_KEY, code, down ? ACTION_PRESS : ACTION_RELEASE, 0, 0, 0); };
   // The pad shows itself on a coarse pointer (a phone); ?pad forces it on, for the headless touch check.
   stats.pad = mountVirtualPad(canvas, PAD, { key: padKey, look() {}, lookEnd() {} }, params.has("pad"));
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });

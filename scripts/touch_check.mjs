@@ -73,7 +73,7 @@ const diagnose = async (at) => {
     const zones = [...document.querySelectorAll('.vpad-zone')].map((z) => { const r = z.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]; });
     const top = document.elementFromPoint(${at[0]}, ${at[1]});
     return JSON.stringify({ vpad: document.querySelectorAll('.vpad').length, on: !!document.querySelector('.vpad.on'), zones,
-      topAtPoint: top ? (top.className || top.id || top.tagName) : null, view: [innerWidth, innerHeight], pointerEvents: window.__pe });
+      topAtPoint: top ? (top.className || top.id || top.tagName) : null, view: [innerWidth, innerHeight], pointerEvents: window.__pe, padCalls: window.host.padLog || null });
   })()`);
   console.log('diagnostics:', info);
 };
