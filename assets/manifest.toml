@@ -46,6 +46,7 @@ license = "CMU-MOCAP"
 author = "CMU Graphics Lab Motion Capture Database, subject 01"
 source_page = "http://mocap.cs.cmu.edu/"
 acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
+changes = "converted by scripts/convert_amc.py to the playground motion format (LMOT): root translation and per-bone rotation per frame; no channels added or altered"
 
 [[asset]]
 id = "motion_cmu_01_skeleton"
@@ -57,6 +58,7 @@ license = "CMU-MOCAP"
 author = "CMU Graphics Lab Motion Capture Database, subject 01"
 source_page = "http://mocap.cs.cmu.edu/"
 acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
+changes = "converted by scripts/convert_amc.py to the playground motion format (LMOT): root translation and per-bone rotation per frame; no channels added or altered"
 
 [[asset]]
 id = "font_press_start_2p"
