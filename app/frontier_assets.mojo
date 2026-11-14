@@ -172,12 +172,25 @@ def locals_at(v: List[Float32], frame: Int, joints: Int) -> List[Mat4]:
     return out^
 
 
+def strip_root_xz(mut locals: List[Mat4], root: Mat4):
+    """The clip plays in place (§6.3, step 6.2 decision): the root's horizontal translation is removed in the shared
+    frame, before build_palette_root. The clip keeps it, for matching. With t the root's local translation and R the
+    root transform's rotation, the shared translation is R·t; its x and z become 0, and the local is R^T·(0, y, 0)."""
+    var sy = root.get(1, 0) * locals[0].get(0, 3) + root.get(1, 1) * locals[0].get(1, 3) + root.get(1, 2) * locals[0].get(2, 3)
+    locals[0].set(0, 3, root.get(1, 0) * sy)
+    locals[0].set(1, 3, root.get(1, 1) * sy)
+    locals[0].set(2, 3, root.get(1, 2) * sy)
+
+
 def pose_palette_frame(c: Character, frame: Int) raises -> List[Float32]:
-    """The palette of one character at a clip frame: each joint's local from its TRS, then the inverse bind and the
-    root transform (the ancestors the bind matrices exclude)."""
+    """The palette of one character at a clip frame: each joint's local from its TRS, the root's horizontal translation
+    removed (in place), then the inverse bind and the root transform (the ancestors the bind matrices exclude)."""
+    if frame < 0 or frame >= c.frames:
+        raise Error("pose_palette_frame: frame " + String(frame) + " is outside the clip (" + String(c.frames) + " frames)")
     var locals = locals_at(c.clip, frame, c.joint_count)
     var ibm = palette_to_mats(c.ibm)
     var root = palette_to_mats(c.root)[0].copy()
+    strip_root_xz(locals, root)
     return build_palette_root(locals, c.parents, ibm, root)
 
 
