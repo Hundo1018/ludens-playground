@@ -27,7 +27,9 @@ from procedural.anim_graph import MotionDB
 
 comptime FEET_A = 17  # leg_joint_L_5 (CesiumMan's left toe)
 comptime FEET_B = 18  # leg_joint_R_5 (right toe)
-comptime HIP = 0  # torso_joint_1: its translation is the hip, its matrix gives the facing
+comptime HIP = 0  # torso_joint_1: the hip is its translation
+comptime LEG_L = 11  # leg_joint_L_1: the left hip joint
+comptime LEG_R = 12  # leg_joint_R_1: the right hip joint
 comptime DIM = 24
 
 
@@ -55,6 +57,7 @@ struct Track(Movable):
     var hip: List[Real]
     var facing: List[Real]
     var feet: List[Real]
+    var min_ground: Real  # the smallest length of the hip's ground projection over the clip, before normalising
 
     def __init__(out self, frames: Int, fps: Int):
         self.frames = frames
@@ -62,20 +65,41 @@ struct Track(Movable):
         self.hip = List[Real]()
         self.facing = List[Real]()
         self.feet = List[Real]()
+        self.min_ground = Real(1e30)
 
 
 def _track(c: Character) raises -> Track:
+    """Hip, facing and feet per frame. The facing is the ground direction forward: the hip joints' lateral vector
+    (leg_joint_L_1 minus leg_joint_R_1, joints 11 and 12) turned 90 degrees on the ground. The spine's local z is not
+    used: it leans with the torso and its ground projection gets short (0.049 m at its minimum on the Khronos clip).
+    The sign is fixed once, on frame 0: forward is the side on which the toes (joints 17 and 18) lie from the hip."""
     var t = Track(c.frames, c.fps)
+    var mats = List[List[Mat4]]()
     for f in range(c.frames):
-        var w = _world_mats(c, f)
+        mats.append(_world_mats(c, f))
+    # sign from frame 0
+    var w0 = mats[0].copy()
+    var lat0x = w0[LEG_L].get(0, 3) - w0[LEG_R].get(0, 3)
+    var lat0z = w0[LEG_L].get(2, 3) - w0[LEG_R].get(2, 3)
+    var toe0x = Real(0.5) * (w0[FEET_A].get(0, 3) + w0[FEET_B].get(0, 3)) - w0[HIP].get(0, 3)
+    var toe0z = Real(0.5) * (w0[FEET_A].get(2, 3) + w0[FEET_B].get(2, 3)) - w0[HIP].get(2, 3)
+    # candidate forward (-lz, lx); keep it when the toes lie on that side
+    var sign = Real(1)
+    if (-lat0z) * toe0x + lat0x * toe0z < Real(0):
+        sign = Real(-1)
+    for f in range(c.frames):
+        ref w = mats[f]
         var h = w[HIP].copy()
         t.hip.append(h.get(0, 3))
         t.hip.append(h.get(1, 3))
         t.hip.append(h.get(2, 3))
-        # The local +z axis of the hip, projected on the ground: the facing.
-        var fx = h.get(0, 2)
-        var fz = h.get(2, 2)
+        var lx = w[LEG_L].get(0, 3) - w[LEG_R].get(0, 3)
+        var lz = w[LEG_L].get(2, 3) - w[LEG_R].get(2, 3)
+        var fx = -lz * sign
+        var fz = lx * sign
         var n = sqrt(fx * fx + fz * fz)
+        if n < t.min_ground:
+            t.min_ground = n
         if n < Real(1e-6):
             fx = Real(0)
             fz = Real(1)
@@ -167,6 +191,10 @@ struct MotionMatch(Movable):
         self.db = db^
         self.scale = scale^
         self.track = track^
+
+    def raw(self, f: Int) -> List[Real]:
+        """The unnormalised feature of clip frame f."""
+        return _raw_feature(self.track, f)
 
     def probe(self, f: Int) -> List[Real]:
         """The normalised feature of clip frame f: the vector a query at that frame sends to `query`."""

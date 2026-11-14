@@ -44,6 +44,25 @@ def main() raises:
         raised = True
     s.check(raised, "a probe of the wrong length is refused")
 
+    # Facing diagnostics (before the checks that depend on them): the ground projection of the hip's local z, and the
+    # mean hip velocity in the facing frame (u along the facing, |v| across it).
+    print("facing: min ground projection length", m.track.min_ground, "frames", frames)
+    var uu = Float64(0)
+    var vv = Float64(0)
+    var rows = 0
+    for f in range(frames):
+        var raw = m.raw(f)
+        uu += Float64(raw[10])
+        vv += Float64(raw[11])
+        rows += 1
+    print("facing: mean hip velocity u", uu / Float64(rows), "v", vv / Float64(rows))
+    # the toes lie ahead of the hip along the facing (raw[0] and raw[5] are the two toes' u), on average over the clip
+    var toe_u = Float64(0)
+    for f in range(frames):
+        var raw2 = m.raw(f)
+        toe_u += Float64(raw2[0]) + Float64(raw2[5])
+    s.check(toe_u / Float64(2 * frames) > 0.0, "facing: the toes lie ahead of the hip on average (" + String(toe_u / Float64(2 * frames)) + " m)")
+    s.check(Float64(m.track.min_ground) > 0.05, "facing: the hip's ground projection never collapses (min " + String(m.track.min_ground) + " m)")
     var got = m6_hash(m)
     var want = m6_hash_of(m6_frames(frames))
     print("M6 hash", got, "expected", want)
