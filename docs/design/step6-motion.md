@@ -84,6 +84,41 @@ Measured M1 values after the unit fix (`scripts/motion_fk.py --selftest`, 5/5 on
 - **Root translation:** scale it by the ratio of hip heights, both measured at rest in the shared frame.
 - **Output:** the `.lcharacter` clip layout, 10 floats per joint per frame. The existing `pose_palette` then plays it unchanged.
 
+**Decided and implemented in 6.1 (`scripts/retarget.py`).**
+
+Yaw: 0. CesiumMan's `leg_L_5` z (+0.027) lies ahead of `leg_L_3` (−0.005) and its left joints have x > 0; CMU's toes are ahead in z and its left is +x. The shared frame needs no yaw.
+
+Mapping (19 rows; every CesiumMan joint gets a source). The rule: map each target joint to the CMU bone that starts at that joint's position. A joint that carries other limbs follows the bone that positions those limbs.
+
+| CesiumMan joint | CMU bone | why |
+|---|---|---|
+| 0 torso_1 | lowerback (direction and rotation); the root translates | the segment torso_1→torso_2 is lowerback's segment; the root places the chain |
+| 1 torso_2 | upperback | starts at lowerback's end |
+| 2 torso_3 | thorax | carries the shoulders |
+| 3 neck_1 | upperneck | starts at lowerneck's end |
+| 4 neck_2 | head | |
+| 5 / 7 / 9 (left arm) | lhumerus / lradius / lwrist | by parent chain |
+| 6 / 8 / 10 (right arm) | rhumerus / rradius / rwrist | by parent chain; the right suffixes do not mirror the left |
+| 11 / 13 / 15 / 17 (left leg) | lfemur / ltibia / lfoot / ltoes | |
+| 12 / 14 / 16 / 18 (right leg) | rfemur / rtibia / rfoot / rtoes | |
+
+Not mapped (intermediate, world transfer absorbs them): lhipjoint, rhipjoint, lowerneck, the clavicles, hands, fingers and thumbs.
+
+Nearest-start check: CMU scaled to CesiumMan's hip height (0.755), roots aligned. Each target joint's start is within a few cm of its bone's start; upperback and lowerback are both close to torso_2, and the distance chose upperback (as in the table).
+
+Rest alignment: `A_j` is the shortest arc from the target's rest direction (child minus joint, in the shared frame) to the source bone's rest direction. The joint with several children uses its first child in the chain (torso_1 → torso_2; torso_3 → neck_1). Leaves (4, 9, 10, 17, 18) take their parent's `A_j`. Twist about a bone is not constrained by the arc; the elbow and knee bend are checked in the figures.
+
+Root rule: CesiumMan's clip locals are in its own frame before `root_transform`. The root joint's local is `root_transform⁻¹ · W_0`, and its translation is the scaled CMU root position (ratio 0.755 = 0.593 / 0.785, the hip above the lowest toe). Non-root locals `W_parent⁻¹·W_j` are frame-independent. Without the root rule CesiumMan lies on its side (the B1 failure).
+
+fps rule: `.lcharacter` has one fps (30) for every clip. The 120 fps CMU trial is resampled by taking every 4th frame (79 frames). Without it the walk plays four times too slow.
+
+Output: clip kind 101, written by `convert_glb.write` (same alignment and selftest). `convert_glb.py --selftest`: 13/13 after the bake.
+
+Checks on the written file (`scripts/retarget.py --check`):
+- M2 (14 mapped non-leaf joints, source frames 0, 60, 120, 200): worst direction error 0.0000° at every frame. The check recomposes the file through a Python mirror of `build_palette_root` with `root_transform`. Before the lowerback fix the same check failed at 4.99° to 10.3° on joint 0 only, which is why the root's rotation alone is not enough.
+- M3: target bone lengths change by at most 5.8e-8 m (bound 1e-5); the lowest `leg_*_5` joint over the clip is +0.087 m (bound −0.02).
+- Stick figures: `/tmp/claude-0/m6/retarget_figures.png` (CMU blue, CesiumMan red, four frames, front and side). CesiumMan follows CMU through the stride; the arms are plausible, though the red arms sit a little lower.
+
 ### 1.7 Where retargeting runs (U6.1)
 
 **Answered (ludens-core `procedural/anim_graph.mojo`, `retarget` and `Skeleton`): `retarget` does not do the retarget this design needs.**
