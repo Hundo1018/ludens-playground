@@ -1,0 +1,63 @@
+# Asset manifest: the licence record for every piece of art, animation, sound and font the game ships.
+# Rules: docs/asset-policy.md. Download and verify: scripts/fetch_assets.py. Credits: assets/CREDITS.md (generated).
+# sha256 is empty until the first download; `scripts/fetch_assets.py --learn` fills it and then it must not change.
+
+[[asset]]
+id = "tex_concrete_wall_008"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_wall_008/concrete_wall_008_diff_1k.jpg"
+file = "concrete_wall_008_diff_1k.jpg"
+sha256 = "a203166d280d3cfc6a91bbc9ffdae406eb9555b4a4f658cd92619063eb17c147"
+license = "CC0-1.0"
+author = "Poly Haven"
+source_page = "https://polyhaven.com/a/concrete_wall_008"
+
+[[asset]]
+id = "char_cesiumman"
+kind = "character"
+url = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb"
+file = "CesiumMan.glb"
+sha256 = "b7001eaeea8254bd44773bcd247e78696d94169388fbb2a1800fc69434e777d9"
+license = "CC-BY-4.0"
+author = "Cesium (model); Khronos glTF-Sample-Assets (distribution)"
+source_page = "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan"
+
+[[asset]]
+id = "char_fox"
+kind = "character"
+url = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb"
+file = "Fox.glb"
+sha256 = "d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7"
+license = "CC-BY-4.0"
+author = "tomkranis (model, 2014); glTF conversion by AsoboStudio and scurest (2017); all CC-BY 4.0"
+source_page = "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox"
+
+[[asset]]
+id = "motion_cmu_01_01"
+kind = "motion"
+url = "http://mocap.cs.cmu.edu/subjects/01/01_01.amc"
+file = "01_01.amc"
+sha256 = "00a0c2889be1b8348ad31af98a1121fc0514984822922811de8564c83406b944"
+license = "CMU-MOCAP"
+author = "CMU Graphics Lab Motion Capture Database, subject 01"
+source_page = "http://mocap.cs.cmu.edu/"
+
+[[asset]]
+id = "motion_cmu_01_skeleton"
+kind = "motion"
+url = "http://mocap.cs.cmu.edu/subjects/01/01.asf"
+file = "01.asf"
+sha256 = "e993ace64e67bcfeaa378e1818db48dbc80fa1ebc3942c07338498ce5fdbcce5"
+license = "CMU-MOCAP"
+author = "CMU Graphics Lab Motion Capture Database, subject 01"
+source_page = "http://mocap.cs.cmu.edu/"
+
+[[asset]]
+id = "font_press_start_2p"
+kind = "font"
+url = "https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/PressStart2P-Regular.ttf"
+file = "PressStart2P-Regular.ttf"
+sha256 = "034c77f1f05ec89421e4a63f0e3a4ca1ecf852cc6d2bf611f126f275728e017d"
+license = "OFL-1.1"
+author = "The Press Start 2P Project Authors"
+source_page = "https://fonts.google.com/specimen/Press+Start+2P"
