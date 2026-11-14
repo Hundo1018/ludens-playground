@@ -29,6 +29,7 @@ struct Character(Copyable, Movable):
     var parents: List[Int]
     var root: List[Float32]  # 16, column-major
     var clip: List[Float32]  # 10 per joint per frame
+    var motion: List[List[Float32]]  # every clip from kind 101 up, in kind order (the motion matching's trials)
     var frames: Int
     var joint_count: Int
     var fps: Int
@@ -87,6 +88,20 @@ def _fps(b: List[UInt8]) raises -> Int:
     raise Error("lcharacter: no fps in the header")
 
 
+def motion_clips(b: List[UInt8]) raises -> List[List[Float32]]:
+    """Every clip from kind 101 up, in kind order, until the first missing kind. Kind 100 is the rest clip."""
+    var out = List[List[Float32]]()
+    var kind = 101
+    while True:
+        try:
+            var blob = _blob(b, kind)
+            out.append(_floats(b, blob[0], blob[1] // 4))
+        except:
+            break
+        kind += 1
+    return out^
+
+
 def parse_character(b: List[UInt8], clip_kind: Int) raises -> Character:
     var pos = _blob(b, 1)
     var nv = pos[1] // 12
@@ -124,7 +139,7 @@ def parse_character(b: List[UInt8], clip_kind: Int) raises -> Character:
     var frames = len(clip) // (10 * joint_count)
     return Character(
         positions^, normals^, uv^, joints^, weights^, indices^, ibm^, rest^, parents^, root^, clip^,
-        frames, joint_count, _fps(b),
+        motion_clips(b), frames, joint_count, _fps(b),
     )
 
 

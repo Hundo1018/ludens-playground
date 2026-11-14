@@ -375,7 +375,8 @@ def playground_host_motion_hash(app: UInt64) abi("C") -> Int32:
     if not h[].cesium:
         return -1
     try:
-        var m = build_match(h[].cesium.value().copy())
+        var c = h[].cesium.value().copy()
+        var m = build_match(c, c.motion)
         return Int32(m6_hash(m))
     except e:
         print("playground_host_motion_hash:", e)

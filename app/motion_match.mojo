@@ -1,4 +1,4 @@
-"""Motion matching over one character's clip (step 6.3, design 1.8).
+"""Motion matching over one character's clips (step 6.3, design 1.8).
 
 The features are the playground's (ludens-core's MotionDB only stores rows and searches them): each frame's feet and hip
 are read from the model-space joint transforms, then expressed in the character's facing frame, so a match does not
@@ -10,9 +10,9 @@ Feature layout, dim = 24, in this order:
 - the root trajectory at +0.33 s, +0.67 s and +1.0 s: the hip's position relative to now (x, z), and its facing (x, z).
   4 each.
 
-Velocities are central differences over the neighbouring frames. Frames past either end of the clip are clamped to the
-end, so the trajectory of the last frames is the trajectory of the clip's last frame and not a continuation. The
-clip's root travel is not periodic, so no wrap is used.
+Velocities are central differences over the neighbouring frames. Frames past either end of a clip are clamped to that
+clip's end, and no feature reads across a clip boundary: each clip has its own track. The clip's root travel is not
+periodic, so no wrap is used.
 
 Each column is divided by its standard deviation over the clip's frames (no mean is removed), as design 1.8 says. The
 same division is applied to the probe, so `query` compares like with like.
@@ -33,10 +33,9 @@ comptime LEG_R = 12  # leg_joint_R_1: the right hip joint
 comptime DIM = 24
 
 
-def _world_mats(c: Character, frame: Int) raises -> List[Mat4]:
-    """Model-space matrix of every joint at a clip frame: the root transform applied to the root joints, then each
+def _world_from(c: Character, locals: List[Mat4]) raises -> List[Mat4]:
+    """Model-space matrix of every joint from its local: the root transform applied to the root joints, then each
     joint's local, in the same order `pose_palette_frame` uses."""
-    var locals = locals_at(c.clip, frame, c.joint_count)
     var root = palette_to_mats(c.root)[0].copy()
     var out = List[Mat4]()
     for j in range(c.joint_count):
@@ -46,6 +45,10 @@ def _world_mats(c: Character, frame: Int) raises -> List[Mat4]:
         else:
             out.append(out[p].copy() * locals[j].copy())
     return out^
+
+
+def _world_mats(c: Character, frame: Int) raises -> List[Mat4]:
+    return _world_from(c, locals_at(c.clip, frame, c.joint_count))
 
 
 struct Track(Movable):
@@ -72,13 +75,14 @@ def _track(c: Character) raises -> Track:
     """Hip, facing and feet per frame. The facing is the ground direction forward: the hip joints' lateral vector
     (leg_joint_L_1 minus leg_joint_R_1, joints 11 and 12) turned 90 degrees on the ground. The spine's local z is not
     used: it leans with the torso and its ground projection gets short (0.049 m at its minimum on the Khronos clip).
-    The sign is fixed once, on frame 0: forward is the side on which the toes (joints 17 and 18) lie from the hip."""
+    The sign is fixed once, from the rest pose: forward is the side on which the toes (joints 17 and 18) lie from the hip."""
     var t = Track(c.frames, c.fps)
     var mats = List[List[Mat4]]()
     for f in range(c.frames):
         mats.append(_world_mats(c, f))
-    # sign from frame 0
-    var w0 = mats[0].copy()
+    # The sign comes from the rest pose, the same for every clip: a stance frame of a walk can have the toes behind the
+    # hip, which flipped the facing of the slow and brisk trials when the sign was read from each clip's frame 0.
+    var w0 = _world_from(c, locals_at(c.rest, 0, c.joint_count))
     var lat0x = w0[LEG_L].get(0, 3) - w0[LEG_R].get(0, 3)
     var lat0z = w0[LEG_L].get(2, 3) - w0[LEG_R].get(2, 3)
     var toe0x = Real(0.5) * (w0[FEET_A].get(0, 3) + w0[FEET_B].get(0, 3)) - w0[HIP].get(0, 3)
@@ -181,68 +185,85 @@ def _raw_feature(t: Track, f: Int) -> List[Real]:
 
 
 struct MotionMatch(Movable):
-    """The clip's frames as a MotionDB (ludens-core), with the per-column scale and the track the probes come from."""
+    """The clips' frames as one MotionDB (ludens-core): rows are the frames of clip 0, then clip 1, and so on. clip_of
+    and frame_of map a row back to its clip and frame; tracks[i] is clip i's track, the probes come from it."""
 
     var db: MotionDB
     var scale: List[Real]
-    var track: Track
+    var tracks: List[Track]
+    var frame_of: List[Int]
 
-    def __init__(out self, var db: MotionDB, var scale: List[Real], var track: Track):
+    def __init__(out self, var db: MotionDB, var scale: List[Real], var tracks: List[Track], var frame_of: List[Int]):
         self.db = db^
         self.scale = scale^
-        self.track = track^
+        self.tracks = tracks^
+        self.frame_of = frame_of^
 
-    def raw(self, f: Int) -> List[Real]:
-        """The unnormalised feature of clip frame f."""
-        return _raw_feature(self.track, f)
+    def rows(self) -> Int:
+        return len(self.frame_of)
 
-    def probe(self, f: Int) -> List[Real]:
-        """The normalised feature of clip frame f: the vector a query at that frame sends to `query`."""
-        var raw = _raw_feature(self.track, f)
+    def probe_row(self, row: Int) -> List[Real]:
+        """The normalised feature of database row `row`: the vector a query from that frame sends to `nearest`."""
+        var raw = _raw_feature(self.tracks[self.db.clip_of[row]], self.frame_of[row])
         var out = List[Real]()
         for d in range(DIM):
             out.append(raw[d] / self.scale[d])
         return out^
 
+    def raw_row(self, row: Int) -> List[Real]:
+        """The unnormalised feature of database row `row`."""
+        return _raw_feature(self.tracks[self.db.clip_of[row]], self.frame_of[row])
+
     def nearest(self, f: List[Real]) raises -> Int:
-        """Index of the nearest stored frame. The probe's length must be the database's dimension."""
+        """Index of the nearest stored row. The probe's length must be the database's dimension."""
         if len(f) != self.db.dim:
             raise Error("motion match: probe has " + String(len(f)) + " values, the database " + String(self.db.dim))
         return self.db.query(f)
 
 
-def build_match(c: Character) raises -> MotionMatch:
-    """The matching database for one clip of a character, one row per clip frame."""
-    var t = _track(c)
-    var rows = List[List[Real]]()
+def build_match(c: Character, clips: List[List[Float32]]) raises -> MotionMatch:
+    """The matching database over the given clips of one character (each in the converter's clip layout)."""
+    var tracks = List[Track]()
+    var raws = List[List[Real]]()
+    var frame_of = List[Int]()
+    var clip_of = List[Int]()
     var sumsq = List[Real](length=DIM, fill=Real(0))
-    for f in range(t.frames):
-        var r = _raw_feature(t, f)
-        for d in range(DIM):
-            sumsq[d] += r[d] * r[d]
-        rows.append(r^)
+    for i in range(len(clips)):
+        var cc = c.copy()
+        cc.clip = clips[i].copy()
+        cc.frames = len(cc.clip) // (10 * cc.joint_count)
+        var t = _track(cc)
+        for f in range(t.frames):
+            var r = _raw_feature(t, f)
+            for d in range(DIM):
+                sumsq[d] += r[d] * r[d]
+            raws.append(r^)
+            frame_of.append(f)
+            clip_of.append(i)
+        tracks.append(t^)
+    var total = len(raws)
     var scale = List[Real]()
     for d in range(DIM):
-        var sd = sqrt(sumsq[d] / Real(t.frames))
+        var sd = sqrt(sumsq[d] / Real(total))
         if sd < Real(1e-9):
             sd = Real(1)
         scale.append(sd)
     var db = MotionDB()
     db.dim = DIM
-    for f in range(t.frames):
+    for row in range(total):
         for d in range(DIM):
-            db.feats.append(rows[f][d] / scale[d])
-        db.clip_of.append(0)
-        db.time_of.append(Real(f) / Real(t.fps))
-    return MotionMatch(db^, scale^, t^)
+            db.feats.append(raws[row][d] / scale[d])
+        db.clip_of.append(clip_of[row])
+        db.time_of.append(Real(frame_of[row]) / Real(c.fps))
+    return MotionMatch(db^, scale^, tracks^, frame_of^)
 
 
-def m6_frames(frames: Int) -> List[Int]:
-    """The 20 database frames M6 queries: frame i * frames // 20 for i in 0 .. 19."""
-    var ks = List[Int]()
+def m6_rows(total: Int) -> List[Int]:
+    """The 20 database rows M6 queries: row i * total // 20 for i in 0 .. 19, spread over every clip."""
+    var out = List[Int]()
     for i in range(20):
-        ks.append(i * frames // 20)
-    return ks^
+        out.append(i * total // 20)
+    return out^
 
 
 def m6_hash_of(hits: List[Int]) -> Int:
@@ -254,8 +275,8 @@ def m6_hash_of(hits: List[Int]) -> Int:
 
 
 def m6_hash(m: MotionMatch) raises -> Int:
-    """M6's hash: the index each of the 20 query frames returns, hashed."""
+    """M6's hash: the row each of the 20 query rows returns, hashed."""
     var hits = List[Int]()
-    for k in m6_frames(m.track.frames):
-        hits.append(m.nearest(m.probe(k)))
+    for row in m6_rows(m.rows()):
+        hits.append(m.nearest(m.probe_row(row)))
     return m6_hash_of(hits)

@@ -296,8 +296,13 @@ def _positions_rel(asf, frame):
     return [[v[0] - x0, v[1], v[2] - z0] for k, v in pos.items() if k != "root"]
 
 
-def loop_window(asf, frames, period_range=(100, 160), start_range=(0, 60)):
-    """Pick [a, b) about one gait cycle long whose end is closest to its start (joint positions, root xz removed)."""
+def loop_window(asf, frames, period_range=(100, 160), start_range=(0, 60), by_ratio=False):
+    """Pick [a, b) about one gait cycle long whose end is closest to its start. Default objective: the summed joint
+    distance between the two ends (root xz removed). by_ratio: the seam criterion itself, the jump from the window's
+    last clip frame back to its first divided by the median per-clip-frame motion (the check's 'loop seam' bound is 2x).
+    Periods are multiples of STEP, since the clip keeps every STEP-th source frame."""
+    if by_ratio:
+        start_range = (0, min(200, len(frames)))  # the seam criterion may start anywhere in the first 200 source frames
     best = None
     rel = {}
     def get(i):
@@ -306,22 +311,31 @@ def loop_window(asf, frames, period_range=(100, 160), start_range=(0, 60)):
         return rel[i]
     for a in range(start_range[0], start_range[1]):
         for period in range(period_range[0], period_range[1]):
+            if period % STEP != 0:
+                continue
             b = a + period
             if b >= len(frames):
                 continue
-            d = sum(math.dist(pa, pb) for pa, pb in zip(get(a), get(b)))
+            if by_ratio:
+                seq = list(range(a, b, STEP))
+                per = sorted(sum(math.dist(pa, pb) for pa, pb in zip(get(seq[k]), get(seq[k + 1]))) for k in range(len(seq) - 1))
+                med = per[len(per) // 2]
+                jump = sum(math.dist(pa, pb) for pa, pb in zip(get(seq[-1]), get(a)))
+                d = jump / med if med > 0 else float("inf")
+            else:
+                d = sum(math.dist(pa, pb) for pa, pb in zip(get(a), get(b)))
             if best is None or d < best[0]:
                 best = (d, a, b)
     return best[1], best[2]
 
 
-def build_with_floor(glb, asf_path, amc_path, out_path):
+def build_with_floor(glb, asf_path, amc_path, out_path, period_range=(100, 160), by_ratio=False):
     """Two passes: a bake with no offset, the feet measured in it, then the offset applied and the clip written again.
     The offset moves the root's height only."""
     import array as _array
     asf = mf.parse_asf(asf_path)
     frames_all = source_frames(asf, amc_path)
-    window = loop_window(asf, frames_all)
+    window = loop_window(asf, frames_all, period_range=period_range, by_ratio=by_ratio)
     tmp = out_path + ".tmp"
     build(glb, asf_path, amc_path, tmp, root_dy=0.0, window=window)
     header, blobs, offsets = cg.read_back(pathlib.Path(tmp))
@@ -384,25 +398,25 @@ def eval_bake(glb, asf_path, amc_path, window):
     return [mirror_world(root_m, vals, f, J, parents) for f in range(len(vals) // (J * 10))]
 
 
-def check(out_path, glb, asf_path, amc_path):
+def check(out_path, glb, asf_path, amc_path, kind=101, period_range=(100, 160), by_ratio=False):
     """M2 (direction, mapped non-leaf joints), M3 (bone lengths; the floor percentile within 0.01 m of rest; leg_5 not
     below -0.02 m), the target foot skate on leg_*_5 (median below 0.15 m/s, the root-ratio check), and the loop seam
     (the jump from the last clip frame to the first at most twice the median per-frame joint displacement)."""
     import array as _array
     asf = mf.parse_asf(asf_path)
     frames_all = source_frames(asf, amc_path)
-    a0, b0 = loop_window(asf, frames_all)
+    a0, b0 = loop_window(asf, frames_all, period_range=period_range, by_ratio=by_ratio)
     d = cg.convert(pathlib.Path(glb), DST_FPS)
     parents = d["joint_parents"]
     J = len(parents)
     root_m = mat4_from_colmajor(d["root_transform"])
     header, blobs, offsets = cg.read_back(pathlib.Path(out_path))
     vals = _array.array("f")
-    vals.frombytes(blobs[101])
+    vals.frombytes(blobs[kind])
     values = list(vals)
     n_frames = len(values) // (J * 10)
     worlds = [mirror_world(root_m, values, f, J, parents) for f in range(n_frames)]
-    print(f"clip kind 101: {n_frames} frames x {J} joints; source window [{a0}, {b0})")
+    print(f"clip kind {kind}: {n_frames} frames x {J} joints; source window [{a0}, {b0})")
     fails = []
 
     # M2: mapped non-leaf directions against the source segments, at four clip frames
@@ -480,7 +494,41 @@ def check(out_path, glb, asf_path, amc_path):
     return 0 if all(ok for _, ok in fails) else 1
 
 
+def build_clips(glb, asf_path, trials, out_path):
+    """Several trials from one subject into one character: each trial is baked with build_with_floor (its own loop
+    window and floor offset) and written as the next clip after the converter's own (kind 100, the Khronos rest clip):
+    the first trial is kind 101, the next 102, and so on. trials: list of (name, amc_path, period_range); the period
+    range bounds the loop window's length in source frames (the slow walk's cycle is longer than the default 100-160)."""
+    import array as _array
+    d = cg.convert(pathlib.Path(glb), DST_FPS)
+    for k, (name, amc, period_range, by_ratio) in enumerate(trials):
+        kind = 101 + k
+        tmp = out_path + f".{kind}.tmp"
+        n, J, window = build_with_floor(glb, asf_path, amc, tmp, period_range=period_range, by_ratio=by_ratio)
+        header, blobs, offsets = cg.read_back(pathlib.Path(tmp))
+        vals = _array.array("f")
+        vals.frombytes(blobs[101])
+        pathlib.Path(tmp).unlink()
+        d["clips"].append({"name": name, "frames": n, "values": list(vals)})
+        print(f"kind {kind} {name}: {n} frames, source window {window}")
+    out = pathlib.Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cg.write(out, d)
+    return len(d["clips"])
+
+
 def main(argv):
+    if argv[1:2] == ["--clips"]:
+        out, glb, asf_path = argv[2], argv[3], argv[4]
+        # name=amc or name=amc:min:max (the loop window's period range, in source frames)
+        trials = []
+        for a in argv[5:]:
+            name, rest = a.split("=", 1)
+            parts = rest.split(":")
+            pr = (int(parts[1]), int(parts[2])) if len(parts) >= 3 else (100, 160)
+            trials.append((name, parts[0], pr, len(parts) == 4 and parts[3] == "r"))
+        build_clips(glb, asf_path, trials, out)
+        return 0
     if argv[1:2] == ["--check"]:
         return check(argv[2], argv[3], argv[4], argv[5])
     n, J, window = build_with_floor(argv[1], argv[2], argv[3], argv[4])
