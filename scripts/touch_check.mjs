@@ -65,6 +65,18 @@ const take = async () => js('(() => { const k = window.__keys.slice(); window.__
 const pressed = (ev, k) => ev.some((e) => e.key === k && e.down);
 const released = (ev, k) => ev.some((e) => e.key === k && !e.down);
 
+// Diagnostics for a failed run: what the pad looks like and what the touch point lands on.
+await js(`(() => { window.__pe = []; for (const t of ['pointerdown','pointerup'])
+  addEventListener(t, (e) => window.__pe.push(t + ':' + e.pointerType + ':' + (e.target.className || e.target.id || e.target.tagName)), true); })()`);
+const diagnose = async (at) => {
+  const info = await js(`(() => {
+    const zones = [...document.querySelectorAll('.vpad-zone')].map((z) => { const r = z.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]; });
+    const top = document.elementFromPoint(${at[0]}, ${at[1]});
+    return JSON.stringify({ vpad: document.querySelectorAll('.vpad').length, on: !!document.querySelector('.vpad.on'), zones,
+      topAtPoint: top ? (top.className || top.id || top.tagName) : null, view: [innerWidth, innerHeight], pointerEvents: window.__pe });
+  })()`);
+  console.log('diagnostics:', info);
+};
 let allOk = true;
 for (let run = 1; run <= 3; run++) {
   const results = [];
@@ -82,6 +94,7 @@ for (let run = 1; run <= 3; run++) {
   await touch('touchMove', [[start[0] + 60, start[1] - 50]]);
   await sleep(100);
   const during = await take();
+  if (!pressed(during, KEY.D)) await diagnose(start);
   check('stick drag presses D (right)', pressed(during, KEY.D), JSON.stringify(during));
   check('stick drag presses W (up)', pressed(during, KEY.W), JSON.stringify(during));
   await touch('touchEnd');
