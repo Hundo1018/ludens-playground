@@ -193,6 +193,7 @@ The order is strict. Each PR merges green before the next one starts. Every pin 
 
 | PR | Repo | Content |
 |---|---|---|
+| A0 | wgpu-mojo | `set_vertex_buffer`, `set_index_buffer`, `draw_indexed` on `FrameRenderPass` (wgpu-mojo PR #31). Must merge before A, and A's engine branch then bumps its wgpu-mojo pin. |
 | 0 | playground | Converter v2, Python rest-identity check, `convert_texture.py` |
 | A | engine | `DrawItem` fields, `MeshRegistry`, static pass, checks A |
 | B | engine | Skinning seam, `SKIN_FN`, compute and vertex paths, checks B1–B2 |
@@ -287,7 +288,7 @@ The order is strict. Each PR merges green before the next one starts. Every pin 
 
 ### PR D: playground, branch `feat/frontier-meshes`
 
-1. Pin bump to PR C's merge commit, in `deps.lock` and `pages.yml`.
+1. Pin bump to PR C's merge commit, in `deps.lock` and `pages.yml`. Pin rule: if the engine's wgpu-mojo pin has moved (PR A0), the playground's wgpu-mojo pin (`deps.lock`) moves in the same commit. The playground compiles the engine's `render3d.mojo`, so a mismatch breaks its build. grep for the old wgpu-mojo SHA in both `deps.lock` and any workflow before merging.
 2. In `build_page.sh`:
    - Run `fetch_assets.py`.
    - Convert CesiumMan and Fox with `convert_glb.py` (v2).
@@ -410,7 +411,9 @@ Each item is UNVERIFIED and is settled by the PR named.
 | U6 | Does map-read readback from wasm work without await, through the capture-style poll? | PR B |
 | U7 | Does changing `DrawItem`'s size affect the HUD or the exports? | Existing gates in PR A |
 | U8 | Is the added page size within 3 MB? | PR D body |
+| U5 | What depth format and pass structure does `render3d` use? | Answered: `Depth32Float`, with `begin_surface_clear_pass_depth` returning `FrameRenderPass` (wgpu-mojo). WGSL is stored as a `comptime` string in `app/render3d.mojo`. The capture path is `app_request_capture` / `app_capture_ptr`. |
 | U9 | Does rgba8unorm without sRGB look darker or washed out? Accepted for step 5; revisit afterwards. | — |
+| U11 | `FrameRenderPass` (what `begin_surface_clear_pass_depth` returns) had no vertex, index or indexed draws. | Settled by wgpu-mojo PR #31: `set_vertex_buffer`, `set_index_buffer` and `draw_indexed` added to `FrameRenderPass`. The web layer already implements all three (`implemented.txt`, `webgpu_impl.mjs`). |
 | U10 | Character scale relative to the Frontier's metres. | Bounding box printed by the PR 0 selftest |
 
 Do not rely on the advisor alone for the UNVERIFIED items. If a check in a PR contradicts the note, fix the note in that PR.
