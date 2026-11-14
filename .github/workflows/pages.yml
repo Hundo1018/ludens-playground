@@ -36,12 +36,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libvulkan1
-          LVP_ICD=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
-          echo "VK_ICD_FILENAMES=$LVP_ICD" >> "$GITHUB_ENV"
-          echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
-          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+      - name: "Native wgpu runtime (libwgpu_native, callback bridge) for the native harness"
+        run: |
+          bash scripts/deps.sh
+          pixi run --manifest-path engine/pixi.toml -e wasm bash -c 'CONDA_PREFIX="$CONDA_PREFIX" bash build/deps/wgpu-mojo/scripts/setup-native.sh'
       - name: "Native harness: B1 (CPU) and B3 (GPU against CPU, per vertex) on lavapipe"
-        run: pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/test_frontier_native.sh --require-gpu
+        env:
+          LVP_DIR: /usr/share/vulkan/icd.d
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          WGPU_BACKEND: vulkan
+        run: |
+          export VK_ICD_FILENAMES="$(ls $LVP_DIR/lvp_icd*.json | head -1)"
+          pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/test_frontier_native.sh --require-gpu
       - name: Play the page in headless Chrome, served without COOP/COEP
         run: |
           mkdir -p build/shots
