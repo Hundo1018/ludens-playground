@@ -28,7 +28,7 @@ MAGIC_GLTF = 0x46546C67  # "glTF"
 CHUNK_JSON = 0x4E4F534A
 CHUNK_BIN = 0x004E4942
 MAGIC_OUT = b"LCHR"
-VERSION = 1
+VERSION = 2
 
 COMPONENT = {5120: ("b", 1), 5121: ("B", 1), 5122: ("h", 2), 5123: ("H", 2), 5125: ("I", 4), 5126: ("f", 4)}
 NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
@@ -185,6 +185,7 @@ def convert(src: pathlib.Path, fps: int):
         "rest": rest,
         "clips": clips,
         "fps": fps,
+        "root_transform": root_transform_of(gltf, joint_nodes)[0],
     }
 
 
@@ -197,61 +198,193 @@ def _parents(gltf, joint_nodes):
     return [index.get(parent_of.get(node, -1), -1) for node in joint_nodes]
 
 
+def _mat_from_trs(t, r, s):
+    """Column-major 4x4 from translation (3), quaternion x,y,z,w (4) and scale (3)."""
+    x, y, z, w = r
+    xx, yy, zz = x * x, y * y, z * z
+    xy, xz, yz = x * y, x * z, y * z
+    wx, wy, wz = w * x, w * y, w * z
+    m = [
+        (1 - 2 * (yy + zz)) * s[0], 2 * (xy + wz) * s[0], 2 * (xz - wy) * s[0], 0.0,
+        2 * (xy - wz) * s[1], (1 - 2 * (xx + zz)) * s[1], 2 * (yz + wx) * s[1], 0.0,
+        2 * (xz + wy) * s[2], 2 * (yz - wx) * s[2], (1 - 2 * (xx + yy)) * s[2], 0.0,
+        t[0], t[1], t[2], 1.0,
+    ]
+    return m
+
+
+_IDENTITY = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+
+def _mat_mul(a, b):
+    """Column-major product a * b."""
+    out = [0.0] * 16
+    for c in range(4):
+        for r in range(4):
+            out[c * 4 + r] = sum(a[k * 4 + r] * b[c * 4 + k] for k in range(4))
+    return out
+
+
+def _mat_vec(m, v):
+    return [sum(m[k * 4 + r] * v[k] for k in range(4)) for r in range(4)]
+
+
+def _local_matrix(node):
+    if "matrix" in node:
+        return [float(x) for x in node["matrix"]]
+    return _mat_from_trs(node.get("translation", [0.0, 0.0, 0.0]),
+                         quat_norm(node.get("rotation", [0.0, 0.0, 0.0, 1.0])),
+                         node.get("scale", [1.0, 1.0, 1.0]))
+
+
+def root_transform_of(gltf, joint_nodes):
+    """Product of the non-joint ancestors above the skeleton root (identity if none). One root only."""
+    parent_of = {}
+    for i, n in enumerate(gltf["nodes"]):
+        for c in n.get("children", []):
+            parent_of[c] = i
+    joint_set = set(joint_nodes)
+    roots = [n for n in joint_nodes if parent_of.get(n) not in joint_set]
+    if len(roots) != 1:
+        raise SystemExit(f"step 5 supports one skeleton root; found {len(roots)}")
+    chain = []
+    p = parent_of.get(roots[0])
+    while p is not None:
+        chain.append(p)
+        p = parent_of.get(p)
+    m = list(_IDENTITY)
+    for node in reversed(chain):  # top-down
+        m = _mat_mul(m, _local_matrix(gltf["nodes"][node]))
+    return m, roots[0], parent_of
+
+
+def rest_palette(gltf, joint_nodes, ibm_flat, rest_flat, root_m, root_node, parent_of):
+    """Palette per joint at the rest pose: (root_transform * joint chain) * IBM, the same product for every joint."""
+    index = {node: i for i, node in enumerate(joint_nodes)}
+    joints = len(joint_nodes)
+    glob = [None] * joints
+    palette = [None] * joints
+    # parents come before children in a valid skeleton; walk until every joint is placed
+    placed = 0
+    while placed < joints:
+        progressed = False
+        for i, node in enumerate(joint_nodes):
+            if glob[i] is not None:
+                continue
+            pnode = parent_of.get(node)
+            if node == root_node:
+                parent_glob = None
+            elif pnode in index and glob[index[pnode]] is not None:
+                parent_glob = glob[index[pnode]]
+            else:
+                continue
+            t = rest_flat[i * 10: i * 10 + 3]
+            r = rest_flat[i * 10 + 3: i * 10 + 7]
+            s = rest_flat[i * 10 + 7: i * 10 + 10]
+            local = _mat_from_trs(t, r, s)
+            # The exported IBMs exclude the non-joint ancestors, which live in root_m. Every joint's global chain
+            # therefore starts from root_m, so every joint carries it (not only the root). Measured on CesiumMan:
+            # with root_m on every joint, rest skinning maps p to root_m * p for every vertex; root-only gave an error of 0.74.
+            glob[i] = _mat_mul(root_m, local) if parent_glob is None else _mat_mul(parent_glob, local)
+            ibm = ibm_flat[i * 16:(i + 1) * 16]
+            palette[i] = _mat_mul(glob[i], ibm)
+            placed += 1
+            progressed = True
+        if not progressed:
+            raise SystemExit("skeleton parents do not form a tree")
+    return palette
+
+
+def _skin_point(p, joints_v, weights_v, palette):
+    out = [0.0, 0.0, 0.0]
+    for k in range(4):
+        w = weights_v[k]
+        if w == 0.0:
+            continue
+        m = palette[joints_v[k]]
+        q = _mat_vec(m, [p[0], p[1], p[2], 1.0])
+        out[0] += w * q[0]
+        out[1] += w * q[1]
+        out[2] += w * q[2]
+    return out
+
+
 def write(out: pathlib.Path, d: dict):
+    """Write the v2 layout (see docs/design/step5-rendering.md, 1.4)."""
     blobs = []
+
+    def add(kind, typecode, values):
+        blobs.append((kind, array.array(typecode, values).tobytes()))
+
+    add(1, "f", d["rows"]["positions"])
+    add(2, "f", d["rows"]["normals"])
+    add(3, "f", d["rows"]["uv"])
+    add(4, "H", d["rows"]["joints"])
+    add(5, "f", d["rows"]["weights"])
+    add(6, "I", d["rows"]["indices"])
+    add(7, "f", d["ibm"])
+    add(8, "f", d["rest"])
+    add(9, "i", d["joint_parents"])
+    add(10, "f", d["root_transform"])
+    for k, clip in enumerate(d["clips"]):
+        add(100 + k, "f", clip["values"])
+
     header = {
+        "format": "lcharacter",
         "version": VERSION,
         "vertices": d["vertices"],
         "indices": d["indices"],
         "joints": d["joints"],
         "fps": d["fps"],
         "joint_names": d["joint_names"],
-        "joint_parents": d["joint_parents"],
-        "clips": [],
-        "blobs": [],
+        "clips": [{"name": c["name"], "frames": c["frames"], "kind": 100 + k} for k, c in enumerate(d["clips"])],
     }
-
-    def add(name, typecode, values):
-        arr = array.array(typecode, values)
-        blobs.append((name, arr.tobytes()))
-        header["blobs"].append({"name": name, "type": typecode, "count": len(arr)})
-
-    add("positions", "f", d["rows"]["positions"])
-    add("normals", "f", d["rows"]["normals"])
-    add("uv", "f", d["rows"]["uv"])
-    add("joints", "H", d["rows"]["joints"])
-    add("weights", "f", d["rows"]["weights"])
-    add("indices", "I", d["rows"]["indices"])
-    add("inverse_bind", "f", d["ibm"])
-    add("rest", "f", d["rest"])
-    for k, clip in enumerate(d["clips"]):
-        add(f"clip{k}", "f", clip["values"])
-        header["clips"].append({"name": clip["name"], "frames": clip["frames"], "blob": f"clip{k}"})
-
     head = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    count = len(blobs)
+    pos = 12 + 12 * count + 4 + len(head)
+    directory = []
+    placed = []
+    for kind, data in blobs:
+        pos = (pos + 15) & ~15
+        directory.append((kind, pos, len(data)))
+        placed.append(data)
+        pos += len(data)
     with out.open("wb") as f:
-        f.write(MAGIC_OUT + struct.pack("<II", VERSION, len(head)) + head)
-        for _, b in blobs:
-            f.write(b)
+        f.write(MAGIC_OUT + struct.pack("<II", VERSION, count))
+        for kind, off, nbytes in directory:
+            f.write(struct.pack("<III", kind, off, nbytes))
+        f.write(struct.pack("<I", len(head)) + head)
+        cur = 12 + 12 * count + 4 + len(head)
+        for (kind, off, nbytes), data in zip(directory, placed):
+            f.write(b"\x00" * (off - cur))
+            f.write(data)
+            cur = off + nbytes
     return out
 
 
 def read_back(path: pathlib.Path):
+    """Read a v2 file. Returns (header, {kind: bytes}, {kind: offset})."""
     data = path.read_bytes()
     if data[:4] != MAGIC_OUT:
         raise SystemExit("bad magic")
-    version, hlen = struct.unpack_from("<II", data, 4)
-    header = json.loads(data[12:12 + hlen].decode("utf-8"))
-    off = 12 + hlen
-    blobs = {}
-    for b in header["blobs"]:
-        arr = array.array(b["type"])
-        arr.frombytes(data[off: off + b["count"] * arr.itemsize])
-        off += b["count"] * arr.itemsize
-        blobs[b["name"]] = arr
-    if off != len(data):
-        raise SystemExit(f"trailing bytes: {len(data) - off}")
-    return header, blobs
+    version, count = struct.unpack_from("<II", data, 4)
+    if version != 2:
+        raise SystemExit(f"expected version 2, got {version}; regenerate the asset")
+    directory = [struct.unpack_from("<III", data, 12 + 12 * i) for i in range(count)]
+    hpos = 12 + 12 * count
+    (hlen,) = struct.unpack_from("<I", data, hpos)
+    header = json.loads(data[hpos + 4: hpos + 4 + hlen].decode("utf-8"))
+    blobs, offsets = {}, {}
+    for kind, off, nbytes in directory:
+        blobs[kind] = data[off: off + nbytes]
+        offsets[kind] = off
+    return header, blobs, offsets
+
+
+def _floats(blob, typecode="f"):
+    arr = array.array(typecode)
+    arr.frombytes(blob)
+    return arr
 
 
 def selftest(src: pathlib.Path):
@@ -262,31 +395,70 @@ def selftest(src: pathlib.Path):
     out.parent.mkdir(parents=True, exist_ok=True)
     d = convert(src, 30)
     write(out, d)
-    header, blobs = read_back(out)
+    header, blobs, offsets = read_back(out)
     checks = []
 
     def check(cond, label):
-        checks.append((cond, label))
+        checks.append(bool(cond))
         print(("PASS " if cond else "FAIL ") + label)
 
+    check(all(off % 16 == 0 for off in offsets.values()), "every blob offset is a multiple of 16")
     check(header["vertices"] == json_count, f"vertices {header['vertices']} == sum of POSITION counts in the glb JSON {json_count}")
-    check(len(blobs["positions"]) == 3 * json_count, "positions has 3 floats per vertex")
-    check(len(blobs["joints"]) == 4 * json_count, "joints has 4 per vertex")
-    check(len(blobs["weights"]) == 4 * json_count, "weights has 4 per vertex")
-    check(header["joints"] == len(gltf["skins"][0]["joints"]), f"joints {header['joints']} == skin.joints in the glb JSON")
-    ibm_count = gltf["accessors"][gltf["skins"][0]["inverseBindMatrices"]]["count"]
-    check(len(blobs["inverse_bind"]) == 16 * ibm_count, f"inverse bind matrices {ibm_count} x 16 floats")
-    weights = blobs["weights"]
-    sums = [sum(weights[i * 4:(i + 1) * 4]) for i in range(json_count)]
+    pos = _floats(blobs[1])
+    nrm = _floats(blobs[2])
+    jnt = _floats(blobs[4], "H")
+    wgt = _floats(blobs[5])
+    idx = _floats(blobs[6], "I")
+    check(len(pos) == 3 * json_count, "positions has 3 floats per vertex")
+    check(len(jnt) == 4 * json_count and len(wgt) == 4 * json_count, "joints and weights have 4 per vertex")
+    skin = gltf["skins"][0]
+    check(header["joints"] == len(skin["joints"]), f"joints {header['joints']} == skin.joints in the glb JSON")
+    ibm_count = gltf["accessors"][skin["inverseBindMatrices"]]["count"]
+    check(len(blobs[7]) == 16 * 4 * ibm_count, f"inverse bind matrices {ibm_count} x 16 floats")
+    sums = [sum(wgt[i * 4:(i + 1) * 4]) for i in range(json_count)]
     check(all(abs(s - 1.0) < 1e-3 for s in sums), "every vertex's joint weights sum to 1")
-    check(max(blobs["joints"]) < header["joints"], "every joint index is inside the skin")
-    max_index = max(blobs["indices"])
-    check(max_index < json_count, "every index is inside the vertex range")
+    check(max(jnt) < header["joints"], "every joint index is inside the skin")
+    check(max(idx) < json_count, "every index is inside the vertex range")
+    rt = _floats(blobs[10])
+    check(len(rt) == 16 and [rt[3], rt[7], rt[11], rt[15]] == [0.0, 0.0, 0.0, 1.0], "root transform is affine (last row 0 0 0 1)")
+    print(f"  root transform (column-major): {[round(v, 6) for v in rt]}")
     for clip in header["clips"]:
         n = clip["frames"] * header["joints"] * 10
-        check(len(blobs[clip["blob"]]) == n, f"clip '{clip['name']}': {clip['frames']} frames x joints x 10 floats")
-    ok = all(c for c, _ in checks)
-    print(f"convert_glb selftest: {sum(1 for c, _ in checks if c)} / {len(checks)} checks; wrote {out}")
+        values = _floats(blobs[clip["kind"]])
+        check(len(values) == n, f"clip '{clip['name']}': {clip['frames']} frames x joints x 10 floats")
+        scales = [values[f * header["joints"] * 10 + j * 10 + k] for f in range(clip["frames"]) for j in range(header["joints"]) for k in (7, 8, 9)]
+        # 1e-5, not 1e-6: the source animation data itself deviates by up to ~1.3e-6 (measured on CesiumMan, clip 0).
+        # The purpose is to reject non-uniform scale, which the skinning does not support; 1e-5 still does that.
+        check(all(abs(s - 1.0) <= 1e-5 for s in scales), f"clip '{clip['name']}': every scale channel within 1e-5 of 1")
+    # rest-pose identity: skinning at the rest pose must reproduce the input positions
+    rest = _floats(blobs[8])
+    parents = list(_floats(blobs[9], "i"))
+    ibm_flat = list(_floats(blobs[7]))
+    root_node = skin["joints"][parents.index(-1)]
+    _, _, parent_of = root_transform_of(gltf, skin["joints"])
+    palette = rest_palette(gltf, skin["joints"], ibm_flat, list(rest), list(rt), root_node, parent_of)
+    worst = 0.0
+    worst_joint = None
+    for v in range(json_count):
+        p = pos[3 * v: 3 * v + 3]
+        q = _skin_point(p, jnt[4 * v: 4 * v + 4], wgt[4 * v: 4 * v + 4], palette)
+        err = max(abs(q[c] - p[c]) for c in range(3))
+        if err > worst:
+            worst = err
+            worst_joint = int(jnt[4 * v + max(range(4), key=lambda k: wgt[4 * v + k])])
+    print(f"  rest-pose skinning: max error {worst:.3e} over {json_count} vertices (worst dominant joint {worst_joint})")
+    # Expected: the rest pose is the root transform applied to the input positions (the Z-up to Y-up ancestors),
+    # because the IBMs exclude those ancestors. Compare against root_transform * p.
+    worst_root = 0.0
+    for v in range(json_count):
+        p = pos[3 * v: 3 * v + 3]
+        q = _skin_point(p, jnt[4 * v: 4 * v + 4], wgt[4 * v: 4 * v + 4], palette)
+        rp = _mat_vec(list(rt), [p[0], p[1], p[2], 1.0])
+        worst_root = max(worst_root, max(abs(q[c] - rp[c]) for c in range(3)))
+    print(f"  rest-pose skinning vs root_transform * p: max error {worst_root:.3e}")
+    check(worst_root < 1e-4, "rest-pose skinning reproduces root_transform * p (max error below 1e-4)")
+    ok = all(checks)
+    print(f"convert_glb selftest: {sum(checks)} / {len(checks)} checks; wrote {out}")
     return 0 if ok else 1
 
 

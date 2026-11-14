@@ -11,6 +11,7 @@ sha256 = "a203166d280d3cfc6a91bbc9ffdae406eb9555b4a4f658cd92619063eb17c147"
 license = "CC0-1.0"
 author = "Poly Haven"
 source_page = "https://polyhaven.com/a/concrete_wall_008"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py"
 
 [[asset]]
 id = "char_cesiumman"
@@ -23,7 +24,7 @@ author = "Cesium (model); Khronos glTF-Sample-Assets (distribution)"
 source_page = "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan"
 # The model's README lists the Cesium logo under a separate LicenseRef-LegalMark-Cesium. The converter does not carry
 # textures, so the logo is not shipped. Read those terms before any texture from this file is used.
-changes = "converted by scripts/convert_glb.py to the playground's flat format: geometry, skin and animation samples; textures and materials not carried over"
+changes = "converted by scripts/convert_glb.py to the playground's v2 format: geometry, skin, animation samples, root transform and rest-pose data; textures and materials not carried over"
 
 [[asset]]
 id = "char_fox"
@@ -34,7 +35,7 @@ sha256 = "d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7"
 license = "CC-BY-4.0"
 author = "tomkranis (model, 2014); glTF conversion by AsoboStudio and scurest (2017); all CC-BY 4.0"
 source_page = "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox"
-changes = "converted by scripts/convert_glb.py to the playground's flat format: geometry, skin and animation samples; textures and materials not carried over"
+changes = "converted by scripts/convert_glb.py to the playground's v2 format: geometry, skin, animation samples, root transform and rest-pose data; textures and materials not carried over"
 
 [[asset]]
 id = "motion_cmu_01_01"

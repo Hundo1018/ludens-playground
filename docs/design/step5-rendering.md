@@ -113,9 +113,9 @@ Vertex buffers are non-interleaved, one per blob.
 - Matrices are column-major on the GPU side. The inverse bind matrices and `root_transform` are glTF column-major, so upload them as they are. WGSL `mat4x4<f32>` is also column-major.
 - Quaternions in files are glTF (x, y, z, w). There is one conversion function, `quat_from_gltf`, into the engine or core quaternion type.
 - The test for that function: (0, 0.7071068, 0, 0.7071068) rotates (1,0,0) to (0,0,-1), within 1e-6.
-- The palette is computed on the CPU each frame:
-  - Root joints: `palette[i] = root_transform · global[i] · IBM[i]`.
-  - Other joints: `palette[i] = global[i] · IBM[i]`.
+- The palette is computed on the CPU each frame, with one formula for every joint:
+  - `palette[i] = root_transform · local_chain[i] · IBM[i]`, where `local_chain[i]` is the product of the joint's local transforms from the skeleton root down to the joint.
+  - Correction (PR 0, measured): the exported IBMs exclude the non-joint ancestors, so `root_transform` must multiply every joint, not only the root. The earlier root-only formula gave a rest-pose error of 0.74 on CesiumMan. With the formula above, rest skinning maps `p` to `root_transform · p` with error 4.4e-7.
   - Parents must come before children. Assert this.
 - The GPU only computes `Σ_k w_k · (palette[j_k] · v)` for k = 0..3.
 
@@ -129,7 +129,7 @@ Vertex buffers are non-interleaved, one per blob.
 - **Seam:** `trait Skinning` with `fn skin(mut self, mesh_id, palette) raises -> List[Float32]`. It has two implementations, `CpuSkinning` and `GpuSkinning` (the compute path plus readback).
 - The parity test is `test_skinning_parity`.
 - Normals use the same palette. Non-uniform scale is not supported in step 5.
-- Check this in PR 0: every clip's S channel is within 1e-6 of 1.
+- Check this in PR 0: every clip's S channel is within 1e-5 of 1. Correction (PR 0, measured): the source animation data deviates by up to 1.3e-6, so 1e-6 is too strict; 1e-5 still rejects non-uniform scale.
 
 ### 1.8 Textures and triplanar
 
@@ -168,7 +168,7 @@ Vertex buffers are non-interleaved, one per blob.
 3. The native and web frames agree through the existing parity harness.
 
 **B. Skinning**
-1. **Rest-pose identity.** Skinning on the CPU at the rest pose reproduces the input positions, with maximum error below 1e-4. This runs first, in Python in the PR 0 selftest. It catches a wrong matrix order, quaternion order, or missing ancestor.
+1. **Rest-pose identity.** Skinning on the CPU at the rest pose reproduces `root_transform · p` (the non-joint ancestors' Z-up to Y-up conversion), with maximum error below 1e-4. This runs first, in Python in the PR 0 selftest. It catches a wrong matrix order, quaternion order, or missing ancestor. Correction (PR 0): the first draft of this check compared against `p` itself; that is wrong for an asset whose IBMs exclude the ancestors.
 2. **Engine synthetic test.** A 2-joint chain, with joint 1 rotated 90° about +Y. A vertex at (1,0,0) with weight 1 on joint 1 must land at (0,0,-1):
    - CPU within 1e-6.
    - GPU vs CPU within 1e-5.
@@ -215,7 +215,7 @@ The order is strict. Each PR merges green before the next one starts. Every pin 
 3. Add selftest checks:
    - Every blob offset is a multiple of 16.
    - Every clip's scale is within 1e-6 of 1.
-   - Rest-pose CPU skinning in pure Python, using f32-rounded inputs, has maximum error below 1e-4 against the positions. Print the maximum error.
+   - Rest-pose CPU skinning in pure Python, using f32-rounded inputs, has maximum error below 1e-4 against `root_transform · p`. Print the maximum error.
    - If the identity check fails, print per joint the maximum of |global(rest) − inverse(IBM)|.
 4. Add `scripts/convert_texture.py`, using Pillow.
    - Arguments: `<in.jpg> <out.ltexture> [--size 256]`.
@@ -327,7 +327,7 @@ python3 scripts/fetch_assets.py --credits && python3 scripts/fetch_assets.py --c
 
 Expected output:
 - `fetch_assets.py`: 8 `ok` lines.
-- Each `convert_glb.py` run includes the lines `PASS every blob offset is a multiple of 16` and `PASS rest-pose skinning reproduces positions`, and ends with `convert_glb selftest: N / N checks`.
+- Each `convert_glb.py` run includes the lines `PASS every blob offset is a multiple of 16` and `PASS rest-pose skinning reproduces root_transform * p (max error below 1e-4)`, and ends with `convert_glb selftest: N / N checks`.
 - `convert_texture.py` ends with `convert_texture selftest: N / N checks`.
 - `--check` prints `assets: 8 entries, manifest and credits OK`.
 
@@ -403,7 +403,7 @@ Each item is UNVERIFIED and is settled by the PR named.
 | ID | Question | Settled by |
 |---|---|---|
 | U1 | Does ludens-core `geometry/skinning` exist, and does its signature take a palette? | PR B step 1 |
-| U2 | Does CesiumMan have a non-joint ancestor transform? | PR 0 identity check |
+| U2 | Does CesiumMan have a non-joint ancestor transform? | Answered in PR 0: yes. The Armature and Z_UP ancestors (a 90° rotation) are in `root_transform`, and the IBMs exclude them. Fox has none (identity). |
 | U3 | Are read-only storage buffers available in the vertex stage on swiftshader and lavapipe? If not, use the uniform fallback. | PR B CI |
 | U4 | Do defaulted `DrawItem` fields compile in Mojo 1.2 across every call site? | PR A step 2 |
 | U5 | What depth format and pass structure does `render3d` use? | PR A step 1 |
