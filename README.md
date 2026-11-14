@@ -15,10 +15,15 @@ Run from the engine's wasm environment (it provides `ludens_wasm_rt`):
 `<host.mjs>` is `ludens_wasm_rt.HOST_MJS`. The check compares against the native target's output for the same sources, which
 is the point: the same numbers on both targets.
 
+## Tests
+
+    bash scripts/test_native.sh tests/frontier_world.mojo   # the streamed world: 26 checks
+
 ## Status
 
 - Working: an outside package builds a wasm module with its own `@export`s over the engine's seam (`app/main.mojo`).
-- Not yet: the streamed world (`game/frontier*.mojo` still lives in ludens-engine), the asset pipeline, and the page.
+- The streamed world (`frontier/`, moved from ludens-engine): its logic, HUD and wrapper, with a native test (26 checks) and wasm exports (`playground_frontier_hash`, `playground_frontier_bodies`), numbers equal on both targets.
+- Not yet: the page for the Frontier, the browser check, the asset pipeline.
 
 See `docs/frontier_plan.md` and `docs/asset-policy.md`.
 
