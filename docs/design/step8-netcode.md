@@ -47,3 +47,29 @@ server is authoritative by construction, since the client only sends inputs and 
 Its PR merged, its check green from a fresh clone, and the Pages build serving the change. For this step the check is:
 a native two-peer run converges (equal state hash at a tick), and a lag-compensated hit lands on the pose the shooter
 saw, with the rewound pose checked against the recorded one.
+
+## Status (2026-11-14)
+
+Built:
+
+- `app/net_frontier.mojo`: `FrontierSim` implements ludens-core's `NetSim`: N players on the floor, positions in integer
+  millimetres (exact on native and wasm), FNV hash, byte save and load. `run_session` runs one server and N clients over
+  `SimLink`s (up and down), as ludens-core's own test does.
+- `TargetRing` and `shot_hits`: a lag-compensated shot tested at the tick the shooter saw. It raises when that tick has
+  left the ring.
+- `tests/frontier_net_native.mojo`: 7/7. A clean link (latency 3) and a bad one (latency 4, jitter 3, 10 % loss) both
+  reach tick 120 on every client and equal the reference run's hash on every client and the server. Shot checks: a shot
+  at tick 4 hits, the same shot at tick 10 misses, tick 2 (left the ring) is refused.
+- Page: `playground_host_net_check` runs the lossy session in wasm and returns the reference hash modulo 1000000007;
+  `host_check` compares it with native: 765407476 on both.
+
+Deviations from the plan text:
+
+- Lag compensation is `shot_hits` in the playground, not the engine's `rewind_ray_cast`. That function needs a
+  `ContactScene6` of colliders; the Frontier's world has positions only. The history ring and the raise-when-evicted rule
+  are the same idea.
+- The page runs the session as a check, with no on-screen netcode. The client's view on the page is not wired to the
+  crowd or the players yet. That is the next step after this one.
+
+Not done: the Frontier's `NetSim` is positions only (no movement rules beyond the clamp, no hits in the session, no crowd
+or characters in the state). The crowd from step 7 is not part of the networked state.

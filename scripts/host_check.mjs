@@ -94,6 +94,12 @@ const M6_NATIVE_HASH = 437896;
 const m6 = await js('window.host.x.playground_host_motion_hash(window.host.app)');
 console.log(`M6 motion-match hash on the page: ${m6} (native ${M6_NATIVE_HASH})`);
 need(m6 === M6_NATIVE_HASH, `M6: the page's motion matching returns the same 20 indices as native (hash ${m6})`);
+// Step 8 (netcode): the session over SnapshotServer / SnapshotClient through a lossy link reaches tick 120 on every
+// peer, and every peer's hash equals the reference. The value is the reference hash; native prints the same (765407476).
+const NET_NATIVE = 765407476;
+const net = await js('window.host.x.playground_host_net_check()');
+console.log(`netcode session on the page: ${net} (native ${NET_NATIVE})`);
+need(net === NET_NATIVE, `netcode: the page's session converges and equals native (code ${net})`);
 // B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
 // Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.
 // CesiumMan's clip is the 33-frame walk (kind 101); the Fox's is its Walk clip (23 frames)

@@ -16,6 +16,7 @@ from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
 from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame
 from motion_match import build_match, m6_hash
+from net_frontier import run_session
 from geometry.mat import Mat4, transform_point4
 from game.arena import DrawItem
 from wgpu._backend.wgpu_native.types import WGPUTextureAspect
@@ -404,6 +405,21 @@ def playground_host_motion_hash(app: UInt64) abi("C") -> Int32:
         return Int32(m6_hash(m))
     except e:
         print("playground_host_motion_hash:", e)
+        return -2
+
+
+@export
+def playground_host_net_check() abi("C") -> Int32:
+    """Step 8 (netcode): the Frontier's session over SnapshotServer and SnapshotClient through a lossy SimLink (jitter 3,
+    10 % loss), in the page's wasm. Returns the reference hash (mod 1000000007) when every client reaches tick 120 and
+    every client and the server equal it; -1 otherwise. tests/frontier_net_native.mojo prints the same number."""
+    try:
+        var r = run_session(4, 3, Real(0.1), UInt64(2026), 120)
+        if r[0] and r[1]:
+            return Int32(r[2])
+        return -1
+    except e:
+        print("playground_host_net_check:", e)
         return -2
 
 

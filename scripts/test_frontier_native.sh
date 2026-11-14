@@ -19,3 +19,10 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/motion_match_native.mojo --target native -o build/motion_match_native
 build/motion_match_native
+# step 8 (netcode): the Frontier's simulation over SnapshotServer / SnapshotClient through SimLink, and lag-compensated shots
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/frontier_net_native.mojo --target native -o build/frontier_net_native
+build/frontier_net_native
