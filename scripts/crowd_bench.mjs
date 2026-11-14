@@ -44,6 +44,31 @@ for (const n of counts) {
   }
   if (ready === null) continue;
   if (!ready) { rows.push({ n, status: 'page not ready' }); continue; }
+  // SYNC=1: each sample is a frame that must finish on the GPU. A capture requested for the frame is read back, and
+  // the readback completes only when the GPU has finished the frame (the map waits for it). The sample is the time
+  // of that whole round trip, so it includes the draw, the GPU work and the readback (the same at every count).
+  if (process.env.SYNC) {
+    const sync = [];
+    for (let i = 0; i < samples; i++) {
+      const t0 = await js('performance.now()');
+      const ok = await js(`(async () => {
+        const h = window.host, x = h.x, app = h.app;
+        x.playground_host_request_capture(app);
+        for (let i = 0; i < 2000 && x.playground_host_capture_ptr(app) === 0n; i++) await new Promise((r) => requestAnimationFrame(r));
+        const p = x.playground_host_capture_ptr(app); if (p === 0n) return false;
+        x.playground_host_capture_release(app);
+        return true;
+      })()`);
+      const t1 = await js('performance.now()');
+      if (!ok) { rows.push({ n, status: 'sync capture never completed' }); break; }
+      sync.push(t1 - t0);
+    }
+    if (sync.length === samples) {
+      console.log(`SYNC count ${n}: median ${median(sync).toFixed(2)} ms, p90 ${[...sync].sort((a, b) => a - b)[Math.floor(samples * 0.9)].toFixed(2)} ms`);
+      rows.push({ n, status: 'sync', median: median(sync), p90: [...sync].sort((a, b) => a - b)[Math.floor(samples * 0.9)] });
+    }
+    continue;
+  }
   // one sample per rendered frame: the wall-clock gap between consecutive frame-counter changes (includes the GPU work,
   // which host_frame's own timer does not wait for)
   const ms = [];
@@ -88,6 +113,6 @@ for (const n of counts) {
 }
 console.log('| instances (extra) | median frame ms | p90 ms | status |');
 console.log('|---:|---:|---:|---|');
-for (const r of rows) console.log(`| ${r.n} | ${r.status === 'ok' ? r.median.toFixed(2) : '-'} | ${r.status === 'ok' ? r.p90.toFixed(2) : '-'} | ${r.status} |`);
+for (const r of rows) console.log(`| ${r.n} | ${(r.status === 'ok' || r.status === 'sync') ? r.median.toFixed(2) : '-'} | ${(r.status === 'ok' || r.status === 'sync') ? r.p90.toFixed(2) : '-'} | ${r.status} |`);
 console.log(`largest count with median under 16.7 ms: ${budget}`);
 finish(0);
