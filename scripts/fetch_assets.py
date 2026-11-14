@@ -28,6 +28,13 @@ LICENCES = {
     "OFL-1.1": "SIL Open Font License 1.1",
     "CMU-MOCAP": "CMU Graphics Lab Motion Capture Database: free to copy, modify and redistribute (see source page)",
 }
+# Where each licence's text lives. A licence without an entry here fails the check: the credits page must link it.
+LICENCE_TEXTS = {
+    "CC0-1.0": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+    "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/legalcode",
+    "OFL-1.1": "https://openfontlicense.org/open-font-license-official-text/",
+    "CMU-MOCAP": "http://mocap.cs.cmu.edu/",
+}
 REQUIRED = ("id", "kind", "url", "file", "sha256", "license", "author", "source_page")
 CMU_HTTP = "http://mocap.cs.cmu.edu/"
 KINDS = {"texture", "model", "character", "motion", "sound", "font", "text"}
@@ -45,8 +52,8 @@ def load() -> list[dict]:
                 problems.append(f"{name}: missing '{key}'")
         if e.get("kind") not in KINDS:
             problems.append(f"{name}: kind must be one of {sorted(KINDS)}")
-        if e.get("license") not in LICENCES:
-            problems.append(f"{name}: licence '{e.get('license')}' is not allowed")
+        if e.get("license") not in LICENCES or e.get("license") not in LICENCE_TEXTS:
+            problems.append(f"{name}: licence '{e.get('license')}' is not allowed (or has no text link)")
         if e.get("license") in ("CC-BY-4.0",) and not e.get("author", "").strip():
             problems.append(f"{name}: CC-BY asset without an author")
         if name in seen:
@@ -125,7 +132,7 @@ def credits_text(entries: list[dict]) -> str:
             lines.append(f"- {e['id']}: {e['acknowledgement']}")
     lines += ["", "## Licences", ""]
     for code in sorted({e["license"] for e in entries}):
-        lines.append(f"- `{code}`: {LICENCES[code]}")
+        lines.append(f"- `{code}`: {LICENCES[code]}. Text: <{LICENCE_TEXTS[code]}>")
     lines.append("")
     return "\n".join(lines)
 
