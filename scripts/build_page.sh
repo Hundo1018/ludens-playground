@@ -24,6 +24,8 @@ rm -rf "$CONV" && mkdir -p "$CONV" "$OUT/assets"
 # slow walk (102), brisk walk (103). The slow walk uses the seam criterion for its loop window (retarget.py, step 6.3).
 python3 scripts/retarget.py --clips "$CONV/CesiumMan.lcharacter" build/assets/src/CesiumMan.glb build/assets/src/07.asf \
   "cmu07_walk=build/assets/src/07_01.amc" "cmu07_slow_walk=build/assets/src/07_04.amc:100:260:r" "cmu07_brisk_walk=build/assets/src/07_12.amc"
+python3 scripts/retarget.py --check-clips "$CONV/CesiumMan.lcharacter" build/assets/src/CesiumMan.glb build/assets/src/07.asf \
+  "cmu07_walk=build/assets/src/07_01.amc" "cmu07_slow_walk=build/assets/src/07_04.amc:100:260:r" "cmu07_brisk_walk=build/assets/src/07_12.amc"
 python3 scripts/convert_glb.py build/assets/src/Fox.glb "$CONV/Fox.lcharacter"
 python3 scripts/convert_texture.py build/assets/src/concrete_wall_008_diff_1k.jpg "$CONV/concrete_wall_008.ltexture"
 # the page ships these three; nothing else in the converted directory

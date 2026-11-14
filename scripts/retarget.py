@@ -517,18 +517,32 @@ def build_clips(glb, asf_path, trials, out_path):
     return len(d["clips"])
 
 
+def parse_trials(args):
+    """name=amc or name=amc:min:max[:r]: the loop window's period range in source frames; r = the seam criterion."""
+    trials = []
+    for a in args:
+        name, rest = a.split("=", 1)
+        parts = rest.split(":")
+        pr = (int(parts[1]), int(parts[2])) if len(parts) >= 3 else (100, 160)
+        trials.append((name, parts[0], pr, len(parts) == 4 and parts[3] == "r"))
+    return trials
+
+
 def main(argv):
     if argv[1:2] == ["--clips"]:
         out, glb, asf_path = argv[2], argv[3], argv[4]
-        # name=amc or name=amc:min:max (the loop window's period range, in source frames)
-        trials = []
-        for a in argv[5:]:
-            name, rest = a.split("=", 1)
-            parts = rest.split(":")
-            pr = (int(parts[1]), int(parts[2])) if len(parts) >= 3 else (100, 160)
-            trials.append((name, parts[0], pr, len(parts) == 4 and parts[3] == "r"))
-        build_clips(glb, asf_path, trials, out)
+        build_clips(glb, asf_path, parse_trials(argv[5:]), out)
         return 0
+    if argv[1:2] == ["--check-clips"]:
+        # the per-trial checks of a built file, for the same trial list as --clips: exit 1 if any trial fails
+        out, glb, asf_path = argv[2], argv[3], argv[4]
+        status = 0
+        for k, (name, amc, pr, by_ratio) in enumerate(parse_trials(argv[5:])):
+            print(f"== {name} (kind {101 + k})")
+            if check(out, glb, asf_path, amc, 101 + k, pr, by_ratio) != 0:
+                status = 1
+        print("check-clips: " + ("PASS" if status == 0 else "FAIL"))
+        return status
     if argv[1:2] == ["--check"]:
         return check(argv[2], argv[3], argv[4], argv[5])
     n, J, window = build_with_floor(argv[1], argv[2], argv[3], argv[4])
