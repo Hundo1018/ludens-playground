@@ -96,7 +96,8 @@ console.log(`M6 motion-match hash on the page: ${m6} (native ${M6_NATIVE_HASH})`
 need(m6 === M6_NATIVE_HASH, `M6: the page's motion matching returns the same 20 indices as native (hash ${m6})`);
 // B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
 // Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.
-const b3Cases = [[1, 0], [1, 15], [1, 30], [1, 45], [1, 60], [2, 0], [2, 11], [2, 22]];
+// CesiumMan's clip is the 33-frame walk (kind 101); the Fox's is its Walk clip (23 frames)
+const b3Cases = [[1, 0], [1, 8], [1, 16], [1, 24], [1, 32], [2, 0], [2, 11], [2, 22]];
 for (const [which, frame] of b3Cases) {
   const name = which === 1 ? 'CesiumMan' : 'Fox';
   const started = await js(`window.host.x.playground_host_b3_start(window.host.app, ${which}, ${frame})`);
