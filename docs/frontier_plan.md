@@ -1,3 +1,5 @@
+> **Superseded.** The governing plan is `docs/PLAN.md`. This file is kept for its history; its card-level steps (for example card 4's hand-made skeleton) are not to be followed.
+
 # Ludens Frontier:三層細化的實作計畫
 
 這份文件是展示範例的工作計畫,分三層:第一層寫目標與決策,第二層寫每階段的工作清單,第三層寫可逐步照做的指令。執行者讀到自己需要的那一層為止。完成一步就更新「現況」。
