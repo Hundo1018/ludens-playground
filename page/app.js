@@ -3,10 +3,34 @@
 import { instantiate } from "./host.mjs";
 import { createImports as wgpuImports } from "./webgpu_host.mjs";
 import { Runtime } from "./webgpu_runtime.mjs";
+import { loadAsset, stageAsset } from "./assets.mjs";
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("canvas");
-const stats = (window.host = { frames: 0, error: "", frameMs: 0, app: 0n, rt: null, x: null });
+const stats = (window.host = { frames: 0, error: "", frameMs: 0, app: 0n, rt: null, x: null, assets: 0 });
+
+// The page's converted assets, by file name: the kind playground_host_asset expects (see app/host.mojo).
+const ASSET_KIND = { "CesiumMan.lcharacter": 1, "Fox.lcharacter": 2, "concrete_wall_008.ltexture": 3 };
+
+// Each entry of index.json is fetched, checked against its sha256 by the engine's loader, copied into wasm memory,
+// handed to the host, and freed once the call has returned (the host copies the bytes).
+async function loadAssets(rt, x, app) {
+  const index = await fetch("./assets/index.json").then((r) => {
+    if (!r.ok) throw new Error("assets/index.json: HTTP " + r.status);
+    return r.json();
+  });
+  for (const [name, meta] of Object.entries(index)) {
+    const kind = ASSET_KIND[name];
+    if (kind === undefined) throw new Error("no host kind for asset " + name);
+    const url = new URL("./assets/" + name, location.href).href; // loadAsset takes an http(s) URL
+    const bytes = await loadAsset(url, meta.sha256, { maxBytes: 16 * 1024 * 1024 });
+    const s = stageAsset(rt, bytes);
+    let rc;
+    try { rc = x.playground_host_asset(app, kind, BigInt(s.ptr), BigInt(s.len)); } finally { s.free(); }
+    if (rc !== 0) throw new Error("playground_host_asset failed for " + name);
+    stats.assets++;
+  }
+}
 
 // GLFW codes for the keys the Frontier uses (the same numbers the engine's keys table gives).
 const KEYS = { KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68, Space: 32, KeyP: 80, KeyR: 82, Escape: 256,
@@ -28,6 +52,7 @@ async function boot() {
   const app = x.playground_host_init(sel, len, canvas.width, canvas.height);
   if (app === 0n) throw new Error("playground_host_init failed");
   stats.app = app;
+  loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
 
   const key = (e, action) => {

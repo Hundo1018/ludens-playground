@@ -79,6 +79,49 @@ await sleep(2500);
 await key('keyup', 'KeyD'); await key('keyup', 'KeyW');
 const moved = await grab('moved');
 if (hub && moved) { const n = differ(hub, moved); need(n > 5000, `holding W and D changed the picture (${n} pixels)`); }
+// the converted assets: both characters and the wall are on the page before the character checks
+for (let i = 0; i < 400; i++) { if ((await js('window.host && window.host.assets')) >= 3) break; await sleep(100); }
+need((await js('window.host && window.host.assets')) === 3, 'the page loads the three converted assets (both characters, the wall)');
+// B1 (design 1.10): the rest-pose palette, applied by the CPU reference, against root_transform * p (< 1e-4)
+for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
+  const err = await js(`window.host.x.playground_host_b1_check(window.host.app, ${which})`);
+  console.log(`${name} rest pose: max |palette * p - root_transform * p| = ${err}`);
+  need(err >= 0 && err < 1e-4, `B1: the ${name} rest pose reproduces root_transform * p (max error ${err})`);
+}
+// B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
+// Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.
+const b3Cases = [[1, 0], [1, 15], [1, 30], [1, 45], [1, 60], [2, 0], [2, 11], [2, 22]];
+for (const [which, frame] of b3Cases) {
+  const name = which === 1 ? 'CesiumMan' : 'Fox';
+  const started = await js(`window.host.x.playground_host_b3_start(window.host.app, ${which}, ${frame})`);
+  let err = -1;
+  if (started === 0) {
+    for (let i = 0; i < 400; i++) {
+      err = await js('window.host.x.playground_host_b3_result(window.host.app)');
+      if (err !== -1) break;
+      await sleep(25);
+    }
+  }
+  console.log(`B3 ${name} frame ${frame}: max |GPU - CPU| = ${err} m`);
+  need(started === 0 && err >= 0 && err < 1e-3, `B3: ${name} frame ${frame}, every vertex GPU against CPU below 1e-3 m (max ${err} m)`);
+}
+// the characters animate with no input: the picture changes between frame 30 and frame 60
+for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 30) break; await sleep(100); }
+const idle30 = await grab('idle30');
+for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 60) break; await sleep(100); }
+const idle60 = await grab('idle60');
+if (idle30 && idle60) { const n = differ(idle30, idle60); need(n > 500, `idle: the picture changes between frame 30 and frame 60 (${n} pixels), so the characters animate`); }
+// C2, on the page: the wall texture's mip 0 and mip 4 read back from the GPU equal the converted levels exactly
+const texStarted = await js('window.host.x.playground_host_texture_start(window.host.app)');
+need(texStarted === 0, 'C2: the texture readback starts once the wall is on the renderer');
+let texErr = -1;
+for (let i = 0; i < 400; i++) {
+  texErr = await js('window.host.x.playground_host_texture_result(window.host.app)');
+  if (texErr !== -1) break;
+  await sleep(25);
+}
+console.log(`wall texture readback: max channel difference from the converted levels = ${texErr}`);
+need(texErr === 0, `C2: the GPU's mip 0 and mip 4 of layer 1 equal the converted levels (max difference ${texErr})`);
 const pageError = await js('window.host.error');
 console.log('page error:', JSON.stringify(pageError));
 need(pageError === '', 'no page error');
