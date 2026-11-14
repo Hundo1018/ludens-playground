@@ -62,7 +62,11 @@ Both orders pass foot skate on the walk. The arms agree in sign on the walk at e
 
 Earlier candidates (not the static order) placed the toes up to 1.9 m above the floor on 01_01, with the body inverted for 15 frames around 1092 to 1106. Both trials were run with the static order, which removes that inversion.
 
-Pending evidence: a stick-figure PNG for both trials, front and side view, at four frames. It is produced by `/tmp/claude-0/m6/static_figures.png` on the engine host and is not in this repository.
+Stick figures (front and side view, four frames, drawn from `scripts/motion_fk.py`'s FK; images are not in the repository):
+- 07_01 walk, frames 0, 60, 120, 200: upright torso, alternating stride in the side view, arms swinging. Judged human.
+- 01_01 jump, frames 0, 500, 1095, 1500: standing figures at 0, 500 and 1500; frame 1095 is a deep forward bend in the jump. Judged human.
+
+Measured M1 values after the unit fix (`scripts/motion_fk.py --selftest`, 5/5 on each trial): 07_01 femur 0.391 m, rest height 1.512 m, foot skate 0.072 and 0.085 m/s; 01_01 femur 0.404 m, rest height 1.564 m, foot skate 0.049 and 0.048 m/s.
 
 - Each bone's local rotation is `L_b = C_b · M_b · C_b⁻¹`, where `C_b` comes from `axis` and `M_b` from the AMC dofs.
 - A bone's end is its parent's end plus `W_b · dir · len`.
