@@ -197,7 +197,10 @@ def selftest(asf_path, amc_path, fps, out_dir):
     p0 = positions(asf, rest_frame)
     femur = math.dist(p0["lhipjoint"], p0["lfemur"]) * unit_m
     print(f"lfemur {femur:.3f} m (units {asf['length_unit']} -> {unit_m:.5f} m per unit)")
-    check(0.35 <= femur <= 0.50, f"M1 lfemur {femur:.3f} m is between 0.35 and 0.50")
+    # The band's purpose is to catch a unit error, which moves the femur by a large factor (the double-unit bug gives
+    # 0.157 m for subject 38). The lower bound is 0.30 m, not 0.35: subject 38 is a smaller subject (0.350 m, rest height
+    # 1.521 m), and 0.30 still rejects 0.157 m. See docs/design/step6-motion.md §1.9.
+    check(0.30 <= femur <= 0.50, f"M1 lfemur {femur:.3f} m is between 0.30 and 0.50")
     low0 = min(p0["ltoes"][1], p0["rtoes"][1]) * unit_m
     head0 = p0["head"][1] * unit_m
     rest_h = head0 - low0
