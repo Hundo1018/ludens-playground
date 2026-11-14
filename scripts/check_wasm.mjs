@@ -1,26 +1,29 @@
-// Run the playground's wasm module under node and check its numbers against the native build's.
-// usage: node scripts/check_wasm.mjs <host.mjs> <playground.wasm>
+// Run the package's wasm module under node and compare every value with the native build's output, which the
+// caller produces from the same sources (scripts/check_parity.sh). No hashes are written down here: a pin bump
+// changes them, and the comparison must not need a manual update.
+// usage: node scripts/check_wasm.mjs <host.mjs> <playground.wasm> <native-output.txt>
 import { readFileSync } from "node:fs";
-const [hostPath, wasmPath] = process.argv.slice(2);
+const [hostPath, wasmPath, nativePath] = process.argv.slice(2);
 const { instantiate } = await import(hostPath);
 const m = await instantiate(readFileSync(wasmPath), { libs: [] });
-// expected: the native target's output for the same sources (frames 1..3)
-const expected = {
-  arena: ["12217565312237657556", "5883669775744707594", "3942389195991980829"],
-  frontier: ["12382180788556832807", "11744582151253365717", "1702746564582479634"],
-};
+// native lines look like: "native frames N <hash>" or "native frontier frames N <hash> bodies <n>"
+const native = readFileSync(nativePath, "utf8").split("\n").filter((l) => l.startsWith("native"));
+if (native.length === 0) { console.log("FAIL no native lines"); process.exit(1); }
 let ok = true;
-const check = (label, got, want) => {
-  const pass = got === want;
+for (const line of native) {
+  const t = line.split(" ");
+  const frames = Number(t[t.indexOf("frames") + 1]);
+  let got;
+  if (t[1] === "frontier") {
+    const hash = String(BigInt.asUintN(64, m.exports.playground_frontier_hash(frames)));
+    const bodies = String(m.exports.playground_frontier_bodies(frames));
+    got = `native frontier frames ${frames} ${hash} bodies ${bodies}`;
+  } else {
+    got = `native frames ${frames} ${String(BigInt.asUintN(64, m.exports.playground_arena_hash(frames)))}`;
+  }
+  const pass = got === line;
   ok &&= pass;
-  console.log(`${pass ? "PASS" : "FAIL"} ${label} = ${got}${pass ? "" : ` (want ${want})`}`);
-};
-for (const [i, want] of expected.arena.entries()) {
-  check(`playground_arena_hash(${i + 1})`, String(BigInt.asUintN(64, m.exports.playground_arena_hash(i + 1))), want);
-}
-for (const [i, want] of expected.frontier.entries()) {
-  check(`playground_frontier_hash(${i + 1})`, String(BigInt.asUintN(64, m.exports.playground_frontier_hash(i + 1))), want);
-  check(`playground_frontier_bodies(${i + 1})`, String(m.exports.playground_frontier_bodies(i + 1)), "112");
+  console.log(`${pass ? "PASS" : "FAIL"} ${line}${pass ? "" : `  (wasm: ${got})`}`);
 }
 if (!ok) process.exit(1);
 console.log("check_wasm: PASS");

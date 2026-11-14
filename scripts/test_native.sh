@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 bash scripts/deps.sh
+python3 scripts/native_libs.py
 ENGINE=build/deps/ludens-core
 WGPU=build/deps/wgpu-mojo
 MA=build/deps/miniaudio-mojo
