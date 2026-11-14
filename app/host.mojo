@@ -184,7 +184,7 @@ struct Host(Movable):
             if item.kind == 0:  # the scenery (ground, walls, boxes) is textured with the concrete wall, layer 1
                 item.material = 2
             self.renderer.value().push(item)
-        self._characters(view)
+        self._characters(view, m.world.player_pos())  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         self.renderer.value().draw(self.boot.device(), target, self.width, self.height, self.hud.value())
         self.world = m^
@@ -200,7 +200,7 @@ struct Host(Movable):
         self.renderer.value().textures.load_layer(self.boot.device(), UInt32(1), self.wall.value().copy())
         self.placed = True
 
-    def _characters(mut self, view: View) raises:
+    def _characters(mut self, view: View, player: Vec3) raises:
         """Each frame: the two characters' palettes (one clip sampled at the clock, the rest pose's ancestors applied),
         their skinned draw items, and the palette buffer the renderer reads."""
         if not self.placed:
@@ -229,9 +229,6 @@ struct Host(Movable):
         var town_bases = List[Int]()
         if self.town:
             var tn = self.town.take()
-            var wm = self.world.take()
-            var player = wm.world.player_pos()
-            self.world = wm^
             tn.step(Real(1.0 / 60.0), player)
             for k in range(len(tn.crowd.pos)):
                 var fr = (Int(self.clock * Float64(c.fps)) + 7 * k) % c.frames
@@ -509,6 +506,7 @@ def playground_host_town(app: UInt64, on: Int32) abi("C") -> Int32:
         return -2
 
 
+@export
 def playground_host_crowd_switch(app: UInt64) abi("C") -> Int32:
     """The HUD's backend switch: flips the live backend of the crowd and returns 1 for the naive backend, 0 for the
     sparse-set one; -1 if there is no crowd."""
