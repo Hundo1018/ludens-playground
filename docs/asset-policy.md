@@ -12,7 +12,7 @@ with its URL, licence and author, and downloaded by script at build time with a 
 | Characters with skeleton and animation | Khronos glTF-Sample-Assets, `Models/CesiumMan`, `Models/Fox` (raw.githubusercontent.com) | CC-BY 4.0 | yes |
 | Characters, many | Quaternius packs (Ultimate Animated Character Pack, Universal Animation Library) | CC0 | no: web buttons only; optional manual download |
 | Motion capture | CMU Graphics Lab, `mocap.cs.cmu.edu/subjects/NN/NN_MM.amc` and `NN.asf` | free to copy, modify and redistribute (site statement) | yes |
-| Sound | OpenGameArt, "512 sound effects (8-bit style)" | CC0 | yes (zip) |
+| Sound | OpenGameArt, "The Essential Retro Video Game Sound Effects Collection [512 sounds]" by Juhani Junkala, `opengameart.org/content/512-sound-effects-8-bit-style` (licence text in the archive's INFO.txt) | CC0 | yes (zip) |
 | Fonts | Google Fonts repo, `ofl/pressstart2p`, `ofl/silkscreen` (OFL.txt included) | SIL OFL 1.1 | yes |
 
 Not used: Kenney (403 from the build environment); Mixamo (Adobe terms do not allow redistribution).
