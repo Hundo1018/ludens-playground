@@ -1,0 +1,64 @@
+name: pages
+
+# The Frontier as a static site. The toolchain (pixi's wasm environment, ludens_wasm_rt) comes from the pinned engine:
+# it is checked out beside this repository and its pixi manifest is used.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build the page and play it without COOP/COEP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: Hundo1018/ludens-engine
+          ref: 37759de2a6380c671141dc79dd1ba2d97002b134
+          path: engine
+      - uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          manifest-path: engine/pixi.toml
+          cache: true
+          environments: wasm
+      - name: Build build/page
+        run: pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/build_page.sh
+      - name: Play the page in headless Chrome, served without COOP/COEP
+        run: |
+          mkdir -p build/shots
+          python3 -m http.server 8150 --bind 127.0.0.1 --directory build/page >/dev/null 2>&1 &
+          sleep 2
+          pixi run --manifest-path engine/pixi.toml -e wasm node scripts/host_check.mjs \
+            "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen" build/shots/host 150
+      - name: Native and wasm give the same numbers
+        run: |
+          HOST="$(pixi run --manifest-path engine/pixi.toml -e wasm python3 -c 'import ludens_wasm_rt; print(ludens_wasm_rt.HOST_MJS)')"
+          pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/check_parity.sh "$HOST"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/page
+
+  deploy:
+    name: deploy to GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deployment
+        uses: actions/deploy-pages@v4
