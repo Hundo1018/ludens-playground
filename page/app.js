@@ -49,7 +49,7 @@ async function boot() {
   const rt = await instantiate(bytes, { libs: [() => ({ env: wgpuImports(wrt) })] });
   wrt.attach(rt);
   const x = rt.exports;
-  stats.rt = rt; stats.x = x;
+  stats.rt = rt; stats.x = x; stats.wrt = wrt; // wrt: the WebGPU runtime (its handles hold the GPUQueue)
   const [sel, len] = rt.str_in("#" + canvas.id);
   const app = x.playground_host_init(sel, len, canvas.width, canvas.height);
   if (app === 0n) throw new Error("playground_host_init failed");
