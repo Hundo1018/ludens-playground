@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: Hundo1018/ludens-engine
-          ref: c625564b168d0cbdef07a9dbd9f06272e246c114
+          ref: d7361e586a6eef69bdcb6827db4b139cfa21ba7e
           path: engine
       - uses: prefix-dev/setup-pixi@v0.10.2
         with:
