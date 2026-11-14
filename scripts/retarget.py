@@ -3,7 +3,8 @@
 docs/design/step6-motion.md §1.6), bake it as a new clip through convert_glb.py's own writer (kind 101), and check M2 and
 M3 on the written file.
 
-    python3 scripts/retarget.py <CesiumMan.glb> <07.asf> <07_01.amc> <out.lcharacter>
+    python3 scripts/retarget.py <CesiumMan.glb> <07.asf> <07_01.amc> <out.lcharacter> [--world]
+      (the walk plays in place by default; --world keeps its root translation)
     python3 scripts/retarget.py --check <out.lcharacter> <CesiumMan.glb> <07.asf> <07_01.amc>
 
 Math (shared frame: Y up, metres, facing +z; CMU is already there, the CesiumMan yaw is 0, §1.6):
@@ -177,7 +178,9 @@ def fk_world(asf, frame):
     return W, pos
 
 
-def build(glb, asf_path, amc_path, out_path):
+def build(glb, asf_path, amc_path, out_path, in_place=True):
+    """Bake the walk as clip kind 101. in_place (the page's choice, §6.2): the root's horizontal position is held at its
+    value on the first frame, so the walk plays where it stands; the root height and every joint are kept."""
     asf = mf.parse_asf(asf_path)
     unit_m = 0.0254 / asf["length_unit"]
     frames = source_frames(asf, amc_path)
@@ -232,6 +235,8 @@ def build(glb, asf_path, amc_path, out_path):
                 R_local = rot3_mul(rot3_T(Wj[parents[j]]), Wj[j])
             if parents[j] < 0:
                 tr = [unit_m * pos["root"][r] * ROOT_RATIO for r in range(3)]
+                if in_place:
+                    tr = [0.0, tr[1], 0.0]
                 t_local = rot3_vec(root_Ri, tr)
             else:
                 t_local = [loc_c[j][r][3] for r in range(3)]
@@ -334,7 +339,8 @@ def check(out_path, glb, asf_path, amc_path):
 def main(argv):
     if argv[1:2] == ["--check"]:
         return check(argv[2], argv[3], argv[4], argv[5])
-    n, J = build(argv[1], argv[2], argv[3], argv[4])
+    in_place = "--world" not in argv
+    n, J = build(argv[1], argv[2], argv[3], argv[4], in_place=in_place)
     print(f"wrote {argv[4]} with clip 1: {n} frames at {DST_FPS} fps, {J} joints")
     return 0
 
