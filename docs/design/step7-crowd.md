@@ -16,28 +16,32 @@ between backends. Count from a measured budget, not a promise.").
   backends agree exactly after 300 ticks; a switch at tick 150 leaves the result unchanged.
 - `host_check`: a 20-member crowd is built, the switch goes naive then sparse-set, and the crowd is removed.
 
-## Frame-time measurement
+## Frame-time measurement (GPU-inclusive, 2026-11-14)
 
-`scripts/crowd_bench.mjs`: headless Chrome, SwiftShader (software), canvas 1280 x 720, `?offscreen&bench=1`, and the
-frame rate uncapped (`--disable-gpu-vsync --disable-frame-rate-limit`). The bench mode draws the whole scene into an
-offscreen target every frame, with no readback. A sample is the wall-clock gap between consecutive frame-counter changes,
-60 samples per count.
+Device: headless Chrome, SwiftShader (software Vulkan-class WebGPU), canvas 1280 x 720, frame rate uncapped
+(`--disable-gpu-vsync --disable-frame-rate-limit`), the page in bench-draw mode (`?offscreen&bench=1`: the whole scene is
+drawn into an offscreen target every frame, no readback).
 
-| extra members | median frame ms | p90 ms |
-|---:|---:|---:|
-| 0 | 17.20 | 19.60 |
-| 213 | 17.50 | 20.60 |
+Method (`GPU_SYNC=1` in `scripts/crowd_bench.mjs`): the WebGPU queue is reached through the page's runtime handle table
+(`window.host.wrt`, handles of kind `queue`). A sample is the time between successive `GPUQueue.onSubmittedWorkDone()`
+resolutions, divided by the number of frames rendered in between. A completion waits for all work queued before it, so once
+the queue is saturated the sample is the GPU's time per frame.
 
-What these numbers are, and are not:
+| extra members | GPU time per frame, median (samples) |
+|---:|---|
+| 0 | 17.58 ms (5 samples; the earlier 5 samples gave 17.46 ms median) |
+| 160 | not obtained: the frame loop stalled under GPU backpressure; no sample completed in several minutes |
+| 213 | not run (depends on 160) |
 
-- They are the draw-mode frame interval. They are not verified to include the GPU's execution of the frame. The
-  submission returns before the software rasteriser runs, so the interval may not wait for the draw.
-- A synchronous measurement was tried (`SYNC=1`: each sample is a capture that waits for the frame's GPU completion). It
-  gave a median of 641.50 ms (p90 3053.40 ms) at 0 members, and the capture for 213 members never completed. So the
-  readback path cannot time a frame on this machine, and the synchronous numbers measure the readback, not the draw.
-- Therefore: the frame interval is 17.2 ms at 0 members and 17.5 ms at 213. Whether the crowd's cost is +0.3 ms, as the
-  interval suggests, is not established. No budget is established on this machine. Earlier conclusions drawn from these
-  intervals ("the scene is over budget", "no count passes") are withdrawn as measured results.
+Reading:
+
+- The scene without any members takes 17.5 to 17.6 ms of GPU time per frame on this device. That is over the 16.7 ms
+  budget before any member is added. The rule "largest count whose GPU-inclusive median stays under 16.7 ms" therefore
+  has no passing count on this device: **no crowd budget exists on this device** (measured).
+- The earlier draw-mode interval (17.2 ms at 0 members) matches this GPU time, which suggests the free-running frame interval
+  was limited by the GPU, not by the display.
+- The crowd's own cost is not measured. The 160-member frame does not complete a sample under this method, so no statement
+  about the crowd's marginal cost is made.
 
 ## Earlier numbers that are not valid
 
@@ -50,9 +54,9 @@ non-drawing mode, so they do lift the cap. In the drawing mode the base scene is
 
 ## Not measured
 
-- A GPU-inclusive frame time. The synchronous readback path cannot time a frame here (see above), and there is no GPU
-  on this machine or in CI. This is blocked by the environment: a GPU-timed measurement needs a runner with a GPU and a
-  timestamp or completion query the page can read.
+- The crowd's marginal GPU cost (the 160-member frame did not complete a sample; the cause, a stall under backpressure, is
+  not diagnosed).
+- A real GPU. This is a software rasteriser; a GPU would be a different budget.
 
 ## Open decisions
 

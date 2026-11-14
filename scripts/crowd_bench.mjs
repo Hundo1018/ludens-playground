@@ -47,6 +47,44 @@ for (const n of counts) {
   // SYNC=1: each sample is a frame that must finish on the GPU. A capture requested for the frame is read back, and
   // the readback completes only when the GPU has finished the frame (the map waits for it). The sample is the time
   // of that whole round trip, so it includes the draw, the GPU work and the readback (the same at every count).
+  // GPU_SYNC=1: time each frame until the GPU has finished it. For every frame the frame counter moves to, the sample is
+  // the time until GPUQueue.onSubmittedWorkDone() resolves (no readback). The queue is reached through the page's
+  // WebGPU runtime handle table (webgpu_runtime.mjs: handles map entries of kind 'queue').
+  if (process.env.GPU_SYNC) {
+    const gs = [];
+    let lastDone = null;
+    let lastFrames = await js('window.host.frames');
+    for (let guard = 0; gs.length < samples && guard < 200000; guard++) {
+      const cur = await js(`(() => {
+        const h = window.host;
+        const q = [...h.wrt.handles.values()].find((o) => o && o.kind === 'queue');
+        return { frames: h.frames, error: h.error, hasQueue: !!q, t: performance.now() };
+      })()`);
+      if (!cur) { const raw = await send('Runtime.evaluate', { expression: `(() => { const h = window.host; return JSON.stringify({ frames: h.frames, hasRt: !!h.rt, handles: h.rt && h.rt.handles ? h.rt.handles.size : -1 }); })()`, returnByValue: true }); rows.push({ n, status: `page evaluation returned nothing: ${JSON.stringify(raw).slice(0, 300)}` }); break; }
+      if (cur.error) { rows.push({ n, status: `error: ${cur.error}` }); break; }
+      if (!cur.hasQueue) { rows.push({ n, status: 'no queue handle on the page' }); break; }
+      if (cur.frames === lastFrames) { await sleep(2); continue; }
+      lastFrames = cur.frames;
+      // throughput: wall time between successive GPU completions, per frame rendered in between. A completion waits for
+      // all work queued before it, so once the queue is saturated this is the GPU's time per frame.
+      const done = await js(`(async () => {
+        const q = [...window.host.wrt.handles.values()].find((o) => o && o.kind === 'queue');
+        await q.queue.onSubmittedWorkDone();
+        return { t: performance.now(), frames: window.host.frames };
+      })()`);
+      if (lastDone) {
+        const dframes = done.frames - lastDone.frames;
+        if (dframes > 0) { gs.push((done.t - lastDone.t) / dframes); console.log(`  sample ${gs.length}: ${(done.t - lastDone.t).toFixed(1)} ms for ${dframes} frame(s)`); }
+      }
+      lastDone = done;
+    }
+    if (gs.length === samples) {
+      const sorted = [...gs].sort((a, b) => a - b);
+      console.log(`GPU_SYNC count ${n}: median ${median(gs).toFixed(2)} ms, p90 ${sorted[Math.floor(samples * 0.9)].toFixed(2)} ms`);
+      rows.push({ n, status: 'gpu-sync', median: median(gs), p90: sorted[Math.floor(samples * 0.9)] });
+    }
+    continue;
+  }
   if (process.env.SYNC) {
     const sync = [];
     for (let i = 0; i < samples; i++) {
@@ -113,6 +151,6 @@ for (const n of counts) {
 }
 console.log('| instances (extra) | median frame ms | p90 ms | status |');
 console.log('|---:|---:|---:|---|');
-for (const r of rows) console.log(`| ${r.n} | ${(r.status === 'ok' || r.status === 'sync') ? r.median.toFixed(2) : '-'} | ${(r.status === 'ok' || r.status === 'sync') ? r.p90.toFixed(2) : '-'} | ${r.status} |`);
+for (const r of rows) console.log(`| ${r.n} | ${(r.status === 'ok' || r.status === 'sync' || r.status === 'gpu-sync') ? r.median.toFixed(2) : '-'} | ${(r.status === 'ok' || r.status === 'sync' || r.status === 'gpu-sync') ? r.p90.toFixed(2) : '-'} | ${r.status} |`);
 console.log(`largest count with median under 16.7 ms: ${budget}`);
 finish(0);
