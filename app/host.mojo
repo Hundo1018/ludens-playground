@@ -86,6 +86,7 @@ struct Host(Movable):
     var capture_ptr: UInt64
     var want_capture: Bool
     var offscreen: Bool
+    var bench_draw: Bool  # step 7 timing: draw every frame into the offscreen target, no readback
     var frame_ms: Float32
     var cesium: Optional[Character]
     var fox: Optional[Character]
@@ -116,6 +117,7 @@ struct Host(Movable):
         self.capture_ptr = 0
         self.want_capture = False
         self.offscreen = False
+        self.bench_draw = False
         self.frame_ms = 0
         self.cesium = None
         self.fox = None
@@ -146,6 +148,7 @@ struct Host(Movable):
         self.capture_ptr = move.capture_ptr
         self.want_capture = move.want_capture
         self.offscreen = move.offscreen
+        self.bench_draw = move.bench_draw
         self.frame_ms = move.frame_ms
         self.cesium = move.cesium^
         self.fox = move.fox^
@@ -287,6 +290,18 @@ struct Host(Movable):
             return 0
         if self.offscreen:
             # Never touch the canvas: headless Chrome loses the device after a canvas draw.
+            if self.bench_draw:
+                # Timing (step 7): the whole scene is drawn into the target every frame; no readback.
+                if not self.capture_target:
+                    self.capture_target = self.boot.device().create_texture(
+                        self.width, self.height, 1, WGPUTextureFormat.RGBA8Unorm,
+                        WGPUTextureUsage.RENDER_ATTACHMENT | WGPUTextureUsage.COPY_SRC,
+                        label="bench_target",
+                    )
+                self._draw(self.capture_target.value().handle().raw, WGPUTextureFormat.RGBA8Unorm)
+                self._capture(WGPUTextureFormat.RGBA8Unorm)  # a requested capture still works in this mode
+                self._finish_capture()
+                return 1
             self._capture(WGPUTextureFormat.RGBA8Unorm)
             self._finish_capture()
             return 1
@@ -344,6 +359,12 @@ def playground_host_release_input(app: UInt64) abi("C"):
 def playground_host_offscreen(app: UInt64, on: Int32) abi("C"):
     """Draw only into the capture target, never the canvas (headless checks)."""
     _host(app)[].offscreen = on != 0
+
+
+@export
+def playground_host_bench_draw(app: UInt64, on: Int32) abi("C"):
+    """Step 7 timing: with offscreen, draw every frame into the target (no readback), so the frame time includes the draw."""
+    _host(app)[].bench_draw = on != 0
 
 
 @export

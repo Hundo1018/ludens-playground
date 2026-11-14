@@ -56,7 +56,18 @@ async function boot() {
   stats.app = app;
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
+  if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
   if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
+  // the HUD's crowd toggle (step 7): 64 ecs members walking to the centre, or none. Off by default: the measured frame
+  // time on this machine is already over the 16.7 ms budget (docs/design/step7-crowd.md), so the crowd is opt-in.
+  const crowdBtn = document.getElementById("crowd");
+  let crowdOn = false;
+  if (crowdBtn) crowdBtn.onclick = () => {
+    crowdOn = !crowdOn;
+    const rc = x.playground_host_crowd(app, crowdOn ? 64 : 0);
+    if (rc < 0) crowdOn = false;
+    crowdBtn.textContent = "crowd: " + (crowdOn ? "64" : "off");
+  };
   // the HUD's backend switch (step 7): flips the live ecs backend of the crowd and relabels the button
   const backendBtn = document.getElementById("backend");
   if (backendBtn) backendBtn.onclick = () => {
