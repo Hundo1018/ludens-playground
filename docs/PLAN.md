@@ -60,3 +60,8 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
   against the pinned engine, plays it headless, checks native against wasm, and deploys from main. The engine's pixi
   environment is used as is, through its manifest path; the playground has no pixi manifest of its own.
 - Town crowd purpose (2026-11-14): the residents walk between the four street corners of card 3 of `docs/frontier_plan.md`, with a guard that closes on the player. Chosen from that card, not asked; the user can redirect it.
+- CesiumMan's texture is not shipped (2026-11-14). The model's README (Khronos glTF-Sample-Assets, CesiumMan) says the
+  model carries the Cesium logo under `LicenseRef-LegalMark-Cesium`: a trademark licence with usage guidelines and no
+  rights beyond them. The model's CC-BY 4.0 licence does not cover the logo. CesiumMan therefore stays untextured.
+  Textured characters come from models whose whole texture is CC-BY or CC0 (the Fox, and any further Khronos model
+  checked the same way).
