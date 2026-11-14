@@ -18,22 +18,26 @@ between backends. Count from a measured budget, not a promise.").
 
 ## Frame-time measurement
 
-`scripts/crowd_bench.mjs`: headless Chrome, SwiftShader (software), canvas 1280 x 720, `?offscreen&bench=1`. The bench
-mode draws the whole scene into an offscreen target every frame, with no readback. A frame's time is the wall-clock gap
-between consecutive frame-counter changes, 60 samples per count.
+`scripts/crowd_bench.mjs`: headless Chrome, SwiftShader (software), canvas 1280 x 720, `?offscreen&bench=1`, and the
+frame rate uncapped (`--disable-gpu-vsync --disable-frame-rate-limit`). The bench mode draws the whole scene into an
+offscreen target every frame, with no readback. A sample is the wall-clock gap between consecutive frame-counter changes,
+60 samples per count.
 
 | extra members | median frame ms | p90 ms |
 |---:|---:|---:|
 | 0 | 17.20 | 19.60 |
 | 213 | 17.50 | 20.60 |
 
-Reading:
+What these numbers are, and are not:
 
-- The scene without any members takes 17.2 ms per frame on this machine. That is over the 16.7 ms budget before the
-  crowd is added. So under the rule "largest count whose uncapped median stays under 16.7 ms", no count passes here.
-- The crowd's marginal cost is about 0.3 ms for 213 members (within the sampling noise of a 17 ms median). The ECS
-  movement and the palette builds are inside these numbers.
-- The 213 figure is the palette ceiling: 4096 matrices / 19 joints, so the palette, not the bench, limits the count.
+- They are the draw-mode frame interval. They are not verified to include the GPU's execution of the frame. The
+  submission returns before the software rasteriser runs, so the interval may not wait for the draw.
+- A synchronous measurement was tried (`SYNC=1`: each sample is a capture that waits for the frame's GPU completion). It
+  gave a median of 641.50 ms (p90 3053.40 ms) at 0 members, and the capture for 213 members never completed. So the
+  readback path cannot time a frame on this machine, and the synchronous numbers measure the readback, not the draw.
+- Therefore: the frame interval is 17.2 ms at 0 members and 17.5 ms at 213. Whether the crowd's cost is +0.3 ms, as the
+  interval suggests, is not established. No budget is established on this machine. Earlier conclusions drawn from these
+  intervals ("the scene is over budget", "no count passes") are withdrawn as measured results.
 
 ## Earlier numbers that are not valid
 
@@ -46,9 +50,9 @@ non-drawing mode, so they do lift the cap. In the drawing mode the base scene is
 
 ## Not measured
 
-- A GPU. There is no GPU on this machine or in CI. The budget for a GPU is open, and needs a runner with one. This is
-  blocked by the environment, not work left to do here.
-- A budget on a machine that draws the base scene under 16.7 ms.
+- A GPU-inclusive frame time. The synchronous readback path cannot time a frame here (see above), and there is no GPU
+  on this machine or in CI. This is blocked by the environment: a GPU-timed measurement needs a runner with a GPU and a
+  timestamp or completion query the page can read.
 
 ## Open decisions
 
