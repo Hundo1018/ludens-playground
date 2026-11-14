@@ -176,7 +176,11 @@ Each trial uses its own skeleton (the `@asf` suffix). M2, M3 and foot skate are 
 The run trial 38_03 (run around in a circle, 120 fps) is **excluded**: its foot skate is 0.181 and 0.190 m/s on 96 and 73
 contact frames (bound 0.15), and the M3 floor check fails. The bound is not tuned to include it. Its window cannot close
 either (a run in a circle changes heading across the window), but the seam is not the reason for exclusion: the skate is.
-So the database has no run; the run requirement of 1.8 stays open.
+So the subject 38 run is excluded. A run from another subject closes the run requirement: subject 16 (CMU: plain runs,
+walks and 90-degree turns; 120 fps) gives trial 16_55 ("run"), in db mode, the first 3 s (46 frames). It passes M2, M3 and
+foot skate (0.126 and 0.143 m/s on 15 and 13 contact frames, bound 0.15): the margin is small and the contact count low,
+both recorded. Its ASF passes M1 (lfemur 0.397 m). The database now has walks, slow and brisk walks, turns and a run,
+from subjects 07, 38 and 16; each trial uses its own skeleton.
 
 Recorded deviation (2026-11-14, step 6.3): the design asks for walk, run and turn trials from one subject. Subject 07
 has walk, slow walk and brisk walk only (the CMU search page, subject 7: trials 1 to 12, no run, no turn). The database
