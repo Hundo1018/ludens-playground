@@ -17,10 +17,13 @@ between backends. Count from a measured budget, not a promise.").
 
 ## The budget that binds first (computed, not measured)
 
-- CesiumMan has 19 joints, so one instance takes 19 palette matrices. The palette allows 4096 / 19 = 215 instances.
-- The mesh record allows 2048 instances. The palette binds first: 215 skinned CesiumMan instances per frame.
-- `skin_draw.mojo` says the palette is "64 instances x 64 joints" for the step 5 capacity. That comment is for 64 joints;
-  at 19 joints the capacity is 215, not 64.
+- The check is on total palette length: `skin_draw.mojo` line 271 rejects a frame whose palette exceeds
+  `MAX_PALETTE_MATRICES` = 4096 matrices. `pose_id` (line 295, `info.x`) is set by the caller per draw item; nothing
+  forces a stride of 64.
+- So the instance count depends on packing. Densely packed, CesiumMan's 19 joints allow 4096 / 19 = 215 instances per
+  frame. The mesh record limit (`MAX_MESH_INSTANCES` = 2048) is not binding.
+- The "64 instances x 64 joints" comment in `skin_draw.mojo` (lines 7 and 36) is stale for CesiumMan: that layout gives
+  64 instances only when every instance has 64 joints.
 
 ## Measurement (required before the step is done)
 

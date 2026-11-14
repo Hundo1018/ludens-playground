@@ -14,6 +14,22 @@ latency controls, lag-compensated hits. Reuses the engine's `gameplay/netcode`."
 - Also present: `LockstepPeer` (line 389), `RollbackPeer` (line 446), and `ArenaSim(NetSim)` (line 252), which is the
   existing `NetSim` implementation to copy the shape from.
 
+## Transport: decided (in-process)
+
+GitHub Pages serves only static files, so no server process can run for the deployed page. ludens-core's netcode is
+in-process already:
+
+- `SimLink` (`gameplay/netcode.mojo:910`) is a deterministic in-memory delayed queue. `send(now, msg)` stores the bytes
+  with an arrival tick of `now + latency + uniform[0, jitter]`, drops a message with probability `loss`, and `deliver(now)`
+  returns the arrived bytes in (time, send order). The seed fixes it, so a test replays exactly.
+- `NetPeer` (`gameplay/netcode.mojo:339`) works on bytes: `submit`, `outgoing(to_node)`, `receive(from_node, msg)`,
+  `update(target)`. No sockets appear anywhere in it.
+
+So the link is in-process. The "second module" of the plan is a second Mojo source module (`app/net_server.mojo`, planned)
+compiled into the same `host.wasm`: the server `SnapshotServer` and the client `SnapshotClient` exchange bytes through a
+`SimLink`. A Worker with its own wasm instance would add `postMessage` plumbing for no behaviour the test needs; the
+server is authoritative by construction, since the client only sends inputs and applies snapshots.
+
 ## What the playground adds
 
 - A second module (`app/net_server.mojo`, planned) holding the authoritative `SnapshotServer` for the Frontier's world,
@@ -22,10 +38,6 @@ latency controls, lag-compensated hits. Reuses the engine's `gameplay/netcode`."
 
 ## Open before the step starts
 
-- The transport. ludens-core's `NetPeer` and the encode functions work on bytes; they do not open sockets. The page has
-  no server in the browser. The step needs a decision: a WebSocket server outside the page (a Node process in the
-  repository, or a relay), or a local two-peer harness that the test drives in one process. Decide with the advisor
-  before writing code.
 - The `NetSim` for the Frontier's world. `ArenaSim` is the arena's; the Frontier's simulation (crowd from step 7 plus the
   player) has no `NetSim` yet.
 - `SimLink` latency: the test must inject a delay and check that the snapshot client converges. Not designed yet.
