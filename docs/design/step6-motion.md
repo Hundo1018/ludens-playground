@@ -188,6 +188,16 @@ Earlier plan text follows.
 - 6.3: MotionDB and matching (M6).
 - 6.4: foot IK, only if ludens-core's IK fits. Otherwise defer it.
 
+## 6.4 decision (deferred)
+
+Foot IK (6.4) is deferred. Reason, checked on 2026-11-14:
+
+- ludens-core has `two_bone` (`procedural/ik.mojo:54`) and `fabrik`, and `foot_plant` (`:210`) takes a ground height and a normal. The machinery fits.
+- The floor it would act on is flat. The engine's arena (`game/arena.mojo`, floor and four walls) is one plane, and the page has no other ground. A foot on a flat floor already sits on it: the floor offset in 1.6 places the rest leg on it, and the CMU walk's toes stay within 0.10 m of their lowest floor (M1).
+- So IK would only change the feet by the sub-centimetre drift the walk already has, and nothing on the page shows a slope to correct.
+
+Revisit when a level has slopes or steps. Then `foot_plant` takes the ground height from the level, and `two_bone` places the knee on each leg.
+
 ## Layer 2: PR 6.0 steps
 
 1. Record U6.8 (what `.lmotion` v1 stores) and the `:units` line.
