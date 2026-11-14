@@ -100,6 +100,10 @@ const NET_NATIVE = 765407476;
 const net = await js('window.host.x.playground_host_net_check()');
 console.log(`netcode session on the page: ${net} (native ${NET_NATIVE})`);
 need(net === NET_NATIVE, `netcode: the page's session converges and equals native (code ${net})`);
+// the HUD's netcode button shows the same result as text on the page
+await js("document.getElementById('net').click()");
+const netText = await js("document.getElementById('netout').textContent");
+need(typeof netText === 'string' && netText.startsWith('converged'), `netcode HUD: the button shows the result on the page ("${netText}")`);
 // B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
 // Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.
 // CesiumMan's clip is the 33-frame walk (kind 101); the Fox's is its Walk clip (23 frames)

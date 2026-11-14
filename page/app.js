@@ -58,6 +58,14 @@ async function boot() {
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
   if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
   if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
+  // the HUD's netcode check (step 8): the lossy session (latency 4, jitter 3, 10 % loss) on the page's wasm, shown as
+  // text. The value is the reference hash (mod 1000000007); native prints the same. -1 would mean a peer did not converge.
+  const netBtn = document.getElementById("net");
+  if (netBtn) netBtn.onclick = () => {
+    const code = x.playground_host_net_check();
+    const out = document.getElementById("netout");
+    if (out) out.textContent = code === 765407476 ? "converged (" + code + ", equal to native)" : "not converged (code " + code + ")";
+  };
   // the HUD's crowd toggle (step 7): 64 ecs members walking to the centre, or none. Off by default: the measured frame
   // time on this machine is already over the 16.7 ms budget (docs/design/step7-crowd.md), so the crowd is opt-in.
   const crowdBtn = document.getElementById("crowd");
