@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: Hundo1018/ludens-engine
-          ref: d7361e586a6eef69bdcb6827db4b139cfa21ba7e
+          ref: cfee91faf77e02608cef4ea5ff975610fcac1ce5
           path: engine
       - uses: prefix-dev/setup-pixi@v0.10.2
         with:
@@ -32,6 +32,22 @@ jobs:
           environments: wasm
       - name: Build build/page
         run: pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/build_page.sh
+      - name: Install Mesa lavapipe (software Vulkan) for the native harness
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libvulkan1
+      - name: "Native wgpu runtime (libwgpu_native, callback bridge) for the native harness"
+        run: |
+          bash scripts/deps.sh
+          pixi run --manifest-path engine/pixi.toml -e wasm bash -c 'CONDA_PREFIX="$CONDA_PREFIX" bash build/deps/wgpu-mojo/scripts/setup-native.sh'
+      - name: "Native harness: B1 (CPU) and B3 (GPU against CPU, per vertex) on lavapipe"
+        env:
+          LVP_DIR: /usr/share/vulkan/icd.d
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          WGPU_BACKEND: vulkan
+        run: |
+          export VK_ICD_FILENAMES="$(ls $LVP_DIR/lvp_icd*.json | head -1)"
+          pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/test_frontier_native.sh --require-gpu
       - name: Play the page in headless Chrome, served without COOP/COEP
         run: |
           mkdir -p build/shots
