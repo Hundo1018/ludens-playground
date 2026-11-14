@@ -18,6 +18,7 @@ from frontier_assets import Character, parse_character, parse_ltexture, pose_pal
 from motion_match import build_match, m6_hash
 from net_frontier import run_session
 from crowd import CrowdState, CrowdRow
+from town import Town, RESIDENTS
 from geometry.mat import Mat4, transform_point4
 from game.arena import DrawItem
 from wgpu._backend.wgpu_native.types import WGPUTextureAspect
@@ -96,6 +97,7 @@ struct Host(Movable):
     var skin_cesium: Int
     var skin_fox: Int
     var crowd: Optional[CrowdState]  # the crowd of step 7 (ecs entities, flow field), None until asked for
+    var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
 
@@ -127,6 +129,7 @@ struct Host(Movable):
         self.skin_cesium = -1
         self.skin_fox = -1
         self.crowd = None
+        self.town = None
         self.tex_job = None
         self.b3_job = None
 
@@ -158,6 +161,7 @@ struct Host(Movable):
         self.skin_cesium = move.skin_cesium
         self.skin_fox = move.skin_fox
         self.crowd = move.crowd^
+        self.town = move.town^
         self.tex_job = move.tex_job^
         self.b3_job = move.b3_job^
 
@@ -220,6 +224,21 @@ struct Host(Movable):
                 var fr = (Int(self.clock * Float64(c.fps)) + r.offset) % c.frames
                 crowd_bases.append(len(pal) // 16)
                 pal.extend(pose_palette_frame(c, fr))
+        # the town (plan stage 3): 24 residents and the guard, each a CesiumMan at its ORCA position, its clip phase spread
+        var town_rows = List[Vec3]()
+        var town_bases = List[Int]()
+        if self.town:
+            var tn = self.town.take()
+            var wm = self.world.take()
+            var player = wm.world.player_pos()
+            self.world = wm^
+            tn.step(Real(1.0 / 60.0), player)
+            for k in range(len(tn.crowd.pos)):
+                var fr = (Int(self.clock * Float64(c.fps)) + 7 * k) % c.frames
+                town_bases.append(len(pal) // 16)
+                pal.extend(pose_palette_frame(c, fr))
+                town_rows.append(tn.crowd.pos[k])
+            self.town = tn^
         self.renderer.value().skin_palette = pal^
         # six units ahead of the eye, 1.5 to either side, feet on the ground (y = 0)
         var ahead = Float64(6.0)
@@ -251,6 +270,15 @@ struct Host(Movable):
                 -1, pos, 0.0, 0.0, 0.0, 1.0,
                 Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.6), Real(0.75), Real(0.9), Real(0.0)),
                 self.skin_cesium, crowd_bases[k], 0,
+            ))
+
+        for k in range(len(town_rows)):
+            var tp = town_rows[k]
+            var pos = Vec3(tp[0], Real(0.0), tp[2], Real(0.0))
+            self.renderer.value().push(DrawItem(
+                -1, pos, 0.0, 0.0, 0.0, 1.0,
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
+                self.skin_cesium, town_bases[k], 0,
             ))
 
     def _capture(mut self, format: UInt32) raises:
@@ -466,6 +494,21 @@ def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
 
 
 @export
+def playground_host_town(app: UInt64, on: Int32) abi("C") -> Int32:
+    """The town (plan stage 3): 24 ORCA residents on corner routes and a guard that closes on the player. on=0 removes
+    them. Returns the number of residents, or -2 if the town could not be built (printed)."""
+    var h = _host(app)
+    if on == 0:
+        h[].town = None
+        return 0
+    try:
+        h[].town = Town()
+        return Int32(RESIDENTS)
+    except e:
+        print("playground_host_town:", e)
+        return -2
+
+
 def playground_host_crowd_switch(app: UInt64) abi("C") -> Int32:
     """The HUD's backend switch: flips the live backend of the crowd and returns 1 for the naive backend, 0 for the
     sparse-set one; -1 if there is no crowd."""
