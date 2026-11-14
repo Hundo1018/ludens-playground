@@ -25,7 +25,7 @@ between backends. Count from a measured budget, not a promise.").
 - The "64 instances x 64 joints" comment in `skin_draw.mojo` (lines 7 and 36) is stale for CesiumMan: that layout gives
   64 instances only when every instance has 64 joints.
 
-## Measurement (required before the step is done)
+## Measurement (done 2026-11-14; procedure below)
 
 The budget is "frame time under 16.7 ms at 1280 x 720 on SwiftShader", counted per instance:
 
@@ -42,3 +42,37 @@ Nothing above is measured yet. The number in the PR is the measured one, not the
 - Whether each crowd member is an `ecs` entity with a `Transform` and a phase component, or a row in a plain array. The
   `ecs` route is what the step asks for; the cost of `for_each2` per frame at `n` = 215 is not measured.
 - The flow field's source and its cost on a 2D grid of the arena. Read `nav/path.mojo` before choosing.
+
+## Result
+
+Headless Chrome, SwiftShader, canvas 1280 x 720 (`?w=1280&h=720`), the page drawing to the canvas (no `?offscreen`).
+`scripts/crowd_bench.mjs`: a fresh page per count, 30 to 40 wall-clock frame intervals per count (the gap between
+consecutive frame-counter changes, so the GPU work counts).
+
+| extra instances | median frame ms | p90 ms | run |
+|---:|---:|---:|---|
+| 0 | 16.60 | 17.10 | run 1 |
+| 16 | 16.60 | 17.10 | run 1 |
+| 64 | 16.60 | 17.10 | run 1 |
+| 128 | 16.60 | 18.10 | run 1 |
+| 128 | 16.60 | 17.70 | run 2 |
+| 160 | 16.50 | 17.70 | run 3 |
+| 192 | 16.70 | 17.70 | run 3 |
+| 213 | 17.00 | 18.60 | run 2 |
+
+The intervals are quantised by the display's 60 Hz frame clock (16.6 to 16.7 ms), so the median can only move in steps
+of about 0.1 ms. Above about 192 the median steps to 17.0 ms: the frame misses a vsync.
+
+Budget: **160 instances** of CesiumMan (19 joints each, extra to the two characters on the page). It is the largest
+tested count whose median stayed at or under 16.6 ms in its run; 192 is borderline (16.70 ms) and 213, the palette
+ceiling, misses (17.00 ms).
+
+Limits of the measurement: one machine, SwiftShader (no GPU), so the budget is for this software rasteriser, not for a
+GPU. The crowd is a grid of identical meshes with per-instance clip phases; the host rebuilds every palette on the CPU
+each frame, and that cost is inside the measured time.
+
+Not measured: the flow field movement (step 7's movement is not built yet), the HUD switch between backends, and any
+`ecs` storage: the instances here are not `ecs` entities. The budget applies to the draw path only.
+
+Procedure to repeat: serve `build/page` on port 8150, then run `node scripts/crowd_bench.mjs <chrome> http://127.0.0.1:8150/index.html 0,16,64,128,160,192,213 40`
+(inside the engine's wasm pixi environment, as the other page checks are).

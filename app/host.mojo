@@ -92,6 +92,7 @@ struct Host(Movable):
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
     var skin_cesium: Int
     var skin_fox: Int
+    var crowd: Int  # extra CesiumMan instances drawn each frame (step 7 measurement; 0 = none)
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
 
@@ -121,6 +122,7 @@ struct Host(Movable):
         self.placed = False
         self.skin_cesium = -1
         self.skin_fox = -1
+        self.crowd = 0
         self.tex_job = None
         self.b3_job = None
 
@@ -150,6 +152,7 @@ struct Host(Movable):
         self.placed = move.placed
         self.skin_cesium = move.skin_cesium
         self.skin_fox = move.skin_fox
+        self.crowd = move.crowd
         self.tex_job = move.tex_job^
         self.b3_job = move.b3_job^
 
@@ -199,6 +202,12 @@ struct Host(Movable):
         var fox_base = c.joint_count
         var pal_fox = pose_palette(f, self.clock)
         pal.extend(pal_fox^)
+        # crowd (step 7): n more CesiumMan instances, each at its own clip phase, one palette each after the two above
+        var crowd_bases = List[Int]()
+        for k in range(self.crowd):
+            var fr = (Int(self.clock * Float64(c.fps)) + 7 * k) % c.frames
+            crowd_bases.append(len(pal) // 16)  # the palette is a list of floats, 16 per matrix; pose_id is a matrix index
+            pal.extend(pose_palette_frame(c, fr))
         self.renderer.value().skin_palette = pal^
         # six units ahead of the eye, 1.5 to either side, feet on the ground (y = 0)
         var ahead = Float64(6.0)
@@ -222,6 +231,21 @@ struct Host(Movable):
             Vec3(Real(0.01), Real(0.01), Real(0.01), Real(0.0)), Vec3(Real(0.9), Real(0.85), Real(0.7), Real(0.0)),
             self.skin_fox, fox_base, 0,
         ))
+        # the crowd on a grid 8 to 30 m ahead of the eye, 16 across, 1.2 m apart; feet on the ground
+        for k in range(self.crowd):
+            var col = Real(Float64(k % 16) - 8.0) * Real(1.2)
+            var row = Real(8.0 + Float64(k // 16) * 1.2)
+            var pos = Vec3(
+                Real(Float64(view.eye[0]) + Float64(view.fwd[0]) * Float64(row) + Float64(view.right[0]) * Float64(col)),
+                Real(0.0),
+                Real(Float64(view.eye[2]) + Float64(view.fwd[2]) * Float64(row) + Float64(view.right[2]) * Float64(col)),
+                Real(0.0),
+            )
+            self.renderer.value().push(DrawItem(
+                -1, pos, 0.0, 0.0, 0.0, 1.0,
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.6), Real(0.75), Real(0.9), Real(0.0)),
+                self.skin_cesium, crowd_bases[k], 0,
+            ))
 
     def _capture(mut self, format: UInt32) raises:
         if self.want_capture and not self.capture_req:
@@ -381,6 +405,17 @@ def playground_host_motion_hash(app: UInt64) abi("C") -> Int32:
     except e:
         print("playground_host_motion_hash:", e)
         return -2
+
+
+@export
+def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
+    """Step 7 measurement: draw n extra CesiumMan instances each frame (0 to stop). Returns n, or -1 if the host is not
+    up or the crowd would not fit the palette (the engine's limit is 4096 matrices; see docs/design/step7-crowd.md)."""
+    var h = _host(app)
+    if n < 0 or n > 400:
+        return -1
+    h[].crowd = Int(n)
+    return n
 
 
 @export

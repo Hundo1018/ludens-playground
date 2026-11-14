@@ -7,6 +7,8 @@ import { loadAsset, stageAsset } from "./assets.mjs";
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("canvas");
+// ?w=&h= sets the canvas size (the step 7 measurement is taken at 1280 x 720; the default stays as in index.html).
+if (params.has("w") && params.has("h")) { canvas.width = Number(params.get("w")); canvas.height = Number(params.get("h")); }
 const stats = (window.host = { frames: 0, error: "", frameMs: 0, app: 0n, rt: null, x: null, assets: 0 });
 
 // The page's converted assets, by file name: the kind playground_host_asset expects (see app/host.mojo).
@@ -54,6 +56,7 @@ async function boot() {
   stats.app = app;
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
+  if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
 
   const key = (e, action) => {
     const code = KEYS[e.code];
