@@ -204,3 +204,81 @@ def run_session(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: Int) rai
     if srv.world_hash() != want.hash():
         all_equal = False
     return (all_at_T, all_equal, Int(want.hash() % UInt64(1000000007)), f)
+
+
+@fieldwise_init
+struct ShotCheck(Copyable, ImplicitlyCopyable, Movable):
+    """What run_shot_session measured: the tick client 0 was showing (`seen`), the server's tick (`now`), the target's
+    distance ahead of the shooter at each (`ahead_seen`, `ahead_now`), the reach between them, and the two results."""
+
+    var found: Bool
+    var seen: Int
+    var now: Int
+    var ahead_seen: Int
+    var ahead_now: Int
+    var reach: Int
+    var hit_seen: Bool
+    var hit_now: Bool
+
+
+def run_shot_session(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: Int) raises -> ShotCheck:
+    """One server and NP clients over lossy SimLinks, as run_session, plus the server's target history: the server
+    records every player's position on every tick (TargetRing, capacity 64). Client 0 shoots at player 1 from its own
+    position. The shot is made on the first frame where client 0 is showing an older tick (`seen`) and player 1 has
+    moved away between `seen` and the server's current tick (`now`): the reach is set between the two distances, so the
+    compensated shot (origin and target at `seen`) hits and the same shot at `now` misses. Found = false if no frame
+    qualifies, which the caller treats as a failure."""
+    var srv = SnapshotServer[FrontierSim](FrontierSim(NP), 3)
+    var clients = List[SnapshotClient[FrontierSim]]()
+    var up = List[SimLink]()
+    var down = List[SimLink]()
+    for p in range(NP):
+        clients.append(SnapshotClient[FrontierSim](FrontierSim(NP), p))
+        up.append(SimLink(latency, jitter, loss, seed + UInt64(p) * 7919))
+        down.append(SimLink(latency, jitter, loss, seed + UInt64(p) * 104729 + 1))
+    var ring = TargetRing(64)
+    var out = ShotCheck(False, -1, -1, 0, 0, 0, False, False)
+    var f = 0
+    while f < 5000:
+        for p in range(NP):
+            if clients[p].newest < T:
+                clients[p].submit(script(p, f))
+        for p in range(NP):
+            up[p].send(f, clients[p].outgoing(NP))
+        for p in range(NP):
+            for m in up[p].deliver(f):
+                srv.receive(p, m)
+        srv.update(min(f + 1, T))
+        var now = srv.sim.tick()
+        if now > 0:
+            ring.record(now, srv.sim.x.copy(), srv.sim.z.copy())
+        for p in range(NP):
+            down[p].send(f, srv.outgoing(p))
+        for p in range(NP):
+            for m in down[p].deliver(f):
+                clients[p].receive(NP, m)
+        var seen = clients[0].newest
+        if not out.found and seen > 0 and now > seen and ring.has(seen) and ring.has(now):
+            var sl = ring.xs[seen % len(ring.ticks)].copy()
+            var zs = ring.zs[seen % len(ring.ticks)].copy()
+            var zn = ring.zs[now % len(ring.ticks)].copy()
+            var ahead_seen = zs[1] - zs[0]
+            var ahead_now = zn[1] - zn[0]
+            if ahead_seen > 0 and ahead_now > ahead_seen + 2:
+                var reach = (ahead_seen + ahead_now) // 2
+                out.found = True
+                out.seen = seen
+                out.now = now
+                out.ahead_seen = ahead_seen
+                out.ahead_now = ahead_now
+                out.reach = reach
+                out.hit_seen = shot_hits(ring, seen, 1, sl[0], zs[0], reach, 100000)
+                out.hit_now = shot_hits(ring, now, 1, ring.xs[now % len(ring.ticks)][0], zn[0], reach, 100000)
+        var done = True
+        for p in range(NP):
+            if clients[p].newest < T:
+                done = False
+        if done:
+            break
+        f += 1
+    return out^

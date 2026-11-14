@@ -73,3 +73,16 @@ Deviations from the plan text:
 
 Not done: the Frontier's `NetSim` is positions only (no movement rules beyond the clamp, no hits in the session, no crowd
 or characters in the state). The crowd from step 7 is not part of the networked state.
+
+## Lag-compensated shots over the link (added 2026-11-14)
+
+- `run_shot_session` runs the same server and three clients over the lossy links (latency 4, jitter 3, 10 % loss). The
+  server records every player's position on every tick into a `TargetRing` (capacity 64). Client 0 shoots at player 1
+  from its own position on the first frame where it shows an older tick (`seen`) and player 1 has moved away since.
+- Measured (one run, seed 2026): client 0 showed tick 15 while the server was at 23. Player 1 was 1250 mm ahead at tick 15
+  and 2500 mm ahead at tick 23; the reach is 1875 mm. The compensated shot (origin and target at tick 15) hits; the same
+  shot at tick 23 misses.
+- The earlier shot checks in `tests/frontier_net_native.mojo` (tick 4 hits, tick 10 misses, tick 2 refused) use a ring
+  filled by hand, so they test `shot_hits` alone. The session checks are the ones that depend on latency.
+- On the clean link the scripted motion never gives a frame where player 1 moves away from client 0 between the two
+  ticks, so that check was dropped rather than tuned.
