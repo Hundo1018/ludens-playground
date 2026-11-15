@@ -451,7 +451,7 @@ def playground_host_capture_release(app: UInt64) abi("C"):
 
 @export
 def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64) abi("C") -> Int32:
-    """A converted asset from the page: 1 CesiumMan.lcharacter, 2 Fox.lcharacter, 3 concrete_wall_008.ltexture. The bytes
+    """A converted asset from the page: 1 CesiumMan.lcharacter, 2 Fox.lcharacter, 3 concrete_wall_003.ltexture. The bytes
     are copied here, so the page may free its buffer when this returns. 0 ok, -1 failed."""
     var h = _host(app)
     try:

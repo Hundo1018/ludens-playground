@@ -37,12 +37,12 @@ python3 scripts/retarget.py --check-clips "$CONV/CesiumMan.lcharacter" build/ass
   "cmu38_walk=build/assets/src/38_01.amc:80:1000:db@build/assets/src/38.asf" "cmu38_walk2=build/assets/src/38_02.amc:80:1000:db@build/assets/src/38.asf" "cmu38_walk_turns=build/assets/src/38_04.amc:80:1000:db@build/assets/src/38.asf" \
   "cmu16_run=build/assets/src/16_55.amc:60:360:db@build/assets/src/16.asf"
 python3 scripts/convert_glb.py build/assets/src/Fox.glb "$CONV/Fox.lcharacter"
-python3 scripts/convert_texture.py build/assets/src/concrete_wall_008_diff_1k.jpg "$CONV/concrete_wall_008.ltexture"
+python3 scripts/convert_texture.py build/assets/src/concrete_wall_003_diff_1k.jpg "$CONV/concrete_wall_003.ltexture"
 python3 scripts/convert_texture.py build/assets/src/rocks_ground_01_diff_1k.jpg "$CONV/rocks_ground_01.ltexture"
 python3 scripts/extract_glb_texture.py build/assets/src/Fox.glb 0 "$CONV/fox_base.png"
 python3 scripts/convert_texture.py "$CONV/fox_base.png" "$CONV/fox_base.ltexture"
 # the page ships these three; nothing else in the converted directory
-for f in CesiumMan.lcharacter Fox.lcharacter concrete_wall_008.ltexture rocks_ground_01.ltexture fox_base.ltexture; do cp "$CONV/$f" "$OUT/assets/"; done
+for f in CesiumMan.lcharacter Fox.lcharacter concrete_wall_003.ltexture rocks_ground_01.ltexture fox_base.ltexture; do cp "$CONV/$f" "$OUT/assets/"; done
 python3 scripts/write_index.py "$OUT/assets" "$OUT/assets/index.json"
 python3 scripts/write_credits_html.py assets/CREDITS.md "$OUT/credits.html"
 WGPU=build/deps/wgpu-mojo

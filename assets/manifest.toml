@@ -3,15 +3,15 @@
 # sha256 is empty until the first download; `scripts/fetch_assets.py --learn` fills it and then it must not change.
 
 [[asset]]
-id = "tex_concrete_wall_008"
+id = "tex_concrete_wall_003"
 kind = "texture"
-url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_wall_008/concrete_wall_008_diff_1k.jpg"
-file = "concrete_wall_008_diff_1k.jpg"
-sha256 = "a203166d280d3cfc6a91bbc9ffdae406eb9555b4a4f658cd92619063eb17c147"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_wall_003/concrete_wall_003_diff_1k.jpg"
+file = "concrete_wall_003_diff_1k.jpg"
+sha256 = "7d1d4b9f5ed1aa3e6385ef3232e26e123a3dac5f364e44f9f34784e39bf8d6bb"
 license = "CC0-1.0"
-author = "Poly Haven"
-source_page = "https://polyhaven.com/a/concrete_wall_008"
-changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py"
+author = "Dimitrios Savva, Rico Cilliers (Poly Haven)"
+source_page = "https://polyhaven.com/a/concrete_wall_003"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; replaces concrete_wall_008 (source luminance std-dev 2.6, too flat; concrete_wall_003 is 27.8)"
 
 [[asset]]
 id = "tex_rocks_ground_01"
