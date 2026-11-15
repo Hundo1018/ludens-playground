@@ -164,6 +164,7 @@ struct Frontier(Movable):
     var culled: Int
     var culling: Bool  # False draws every loaded item: what culling saves can be measured
     var debug: Bool  # ?debug: the HUD shows the streaming counters (W9)
+    var ao: Bool  # W10: the floor's ambient-occlusion term is on (set by the host when the grid is set); the HUD says so
     var goal_done: List[Bool]  # W6: one goal per zone, at its fast-travel point; each counted once
     var goal_count: Int
     var wall_released: Bool  # W7: the fractured wall exists (it is added when the player comes near)
@@ -185,6 +186,7 @@ struct Frontier(Movable):
         self.culled = 0
         self.culling = True
         self.debug = False
+        self.ao = False
         self.goal_done = List[Bool]()
         for _ in range(GOAL_COUNT):
             self.goal_done.append(False)
@@ -217,6 +219,7 @@ struct Frontier(Movable):
         self.culled = move.culled
         self.culling = move.culling
         self.debug = move.debug
+        self.ao = move.ao
         self.goal_done = move.goal_done.copy()
         self.goal_count = move.goal_count
         self.wall_released = move.wall_released

@@ -298,6 +298,7 @@ struct Host(Movable):
         if self.ao_on and not self.ao_done:  # W10: the floor's occlusion, traced on the GPU over the pillars once
             var cells = ao_grid(m.world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0))
             self.renderer.value().mesh.set_ao(self.boot.device(), cells, AO_N, AO_N, AO_X0, AO_X0, AO_SIZE, AO_SIZE, True)
+            m.world.ao = True  # the HUD names the term (W10)
             self.ao_done = True
         if self.shadow_on:
             if not self.shadow:
