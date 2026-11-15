@@ -8,6 +8,7 @@ from frontier.mode import FrontierMode
 from game.camera_view import View
 from game.controls import Controls
 from geometry.vec import Real
+from scene import Scene
 from hud import Hud
 from render3d import ArenaRenderer
 from app.mesh_pass import MeshRegistry, unit_cube_arrays
@@ -96,6 +97,11 @@ struct Host(Movable):
     var bench_draw: Bool  # step 7 timing: draw every frame into the offscreen target, no readback
     var frame_ms: Float32
     var prot: List[Float64]  # the protagonist: drawn x, z, heading; player x, z; velocity heading (W3 check)
+    var audio: Optional[Scene]  # W8: the audio scene (48 kHz), made by playground_host_audio_init
+    var audio_goal: Int  # W8: the clip played when a zone goal is reached; -1 until set
+    var audio_played: Int  # W8: sounds started on the scene
+    var audio_rendered: Int  # W8: frames rendered for the page's worklet
+    var goal_seen: Int  # W8: goals the sound has answered
     var cesium: Optional[Character]
     var fox: Optional[Character]
     var fox_clips: List[Character]  # the Fox's Survey (100), Walk (101) and Run (102) from the same file, in that order
@@ -151,6 +157,11 @@ struct Host(Movable):
         self.bench_draw = False
         self.frame_ms = 0
         self.prot = List[Float64]()
+        self.audio = None
+        self.audio_goal = -1
+        self.audio_played = 0
+        self.audio_rendered = 0
+        self.goal_seen = 0
         self.cesium = None
         self.fox = None
         self.fox_clips = List[Character]()
@@ -206,6 +217,11 @@ struct Host(Movable):
         self.bench_draw = move.bench_draw
         self.frame_ms = move.frame_ms
         self.prot = move.prot^
+        self.audio = move.audio^
+        self.audio_goal = move.audio_goal
+        self.audio_played = move.audio_played
+        self.audio_rendered = move.audio_rendered
+        self.goal_seen = move.goal_seen
         self.cesium = move.cesium^
         self.fox = move.fox^
         self.fox_clips = move.fox_clips^
@@ -490,10 +506,22 @@ struct Host(Movable):
         var m = self.world.take()
         m.step(intent, min(dt, 0.1))
         self.world = m^
+        self._audio_goals()
         var rc = self._frame_draw()
         # Every frame ends here, drawn or not: a key edge or a pointer movement lasts exactly one frame.
         self.input.begin_frame()
         return rc
+
+    def _audio_goals(mut self) raises:
+        """W8: each zone goal reached starts the goal sound once."""
+        if not self.audio or not self.world:
+            return
+        var gc = self.world.value().world.goal_count
+        while self.goal_seen < gc:
+            self.goal_seen += 1
+            if self.audio_goal >= 0:
+                self.audio.value().play(self.audio_goal, 1.0)
+                self.audio_played += 1
 
     def _frame_draw(mut self) raises -> Int32:
         if not self.boot.step():
@@ -1286,3 +1314,76 @@ def playground_host_crowd_feed(app: UInt64, ptr: UInt64, n: Int32) abi("C") -> I
 def playground_host_contacts(app: UInt64) abi("C") -> Int32:
     """W6: how many times the town's guard has touched the player since the town was switched on."""
     return Int32(_host(app)[].contacts)
+
+
+# W8: the page's audio. The page decodes its .lsound files to stereo f32 and registers them; the mix is rendered on request
+# and sent to an AudioWorklet (the page has no SharedArrayBuffer on Pages).
+comptime AUDIO_RATE: UInt32 = 48000
+
+
+@export
+def playground_host_audio_init(app: UInt64) abi("C") -> Int32:
+    var h = _host(app)
+    if h[].audio:
+        return 0
+    try:
+        h[].audio = Scene(AUDIO_RATE)
+        return 0
+    except e:
+        print("playground_host_audio_init:", e)
+        return -2
+
+
+@export
+def playground_host_audio_clip(app: UInt64, ptr: UInt64, frames: Int32) abi("C") -> Int32:
+    """Register `frames` stereo frames (interleaved L R f32) at wasm address ptr as a clip. Returns the clip id, -1 if there is no scene."""
+    var h = _host(app)
+    if not h[].audio:
+        return -1
+    var src = Pointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(ptr))
+    var samples = List[Float32]()
+    for i in range(Int(frames) * 2):
+        samples.append(src.unsafe_offset(i)[])
+    try:
+        return Int32(h[].audio.value().add_clip_pcm(samples))
+    except e:
+        print("playground_host_audio_clip:", e)
+        return -1
+
+
+@export
+def playground_host_audio_goal(app: UInt64, clip: Int32) abi("C") -> Int32:
+    """The clip played when a zone goal is reached."""
+    _host(app)[].audio_goal = Int(clip)
+    return 0
+
+
+@export
+def playground_host_audio_render(app: UInt64, dst: UInt64, frames: Int32) abi("C") -> Int32:
+    """Render `frames` frames of the mix into wasm address dst (interleaved stereo f32). 0, or -1/-2."""
+    var h = _host(app)
+    if not h[].audio:
+        return -1
+    var out = List[Float32]()
+    try:
+        h[].audio.value().render(out, UInt64(frames))
+    except e:
+        print("playground_host_audio_render:", e)
+        return -2
+    var dstp = Pointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(dst))
+    for i in range(len(out)):
+        dstp.unsafe_offset(i)[] = out[i]
+    h[].audio_rendered += Int(frames)
+    return 0
+
+
+@export
+def playground_host_audio_played(app: UInt64) abi("C") -> Int32:
+    """Sounds started on the scene (one per zone goal)."""
+    return Int32(_host(app)[].audio_played)
+
+
+@export
+def playground_host_audio_rendered(app: UInt64) abi("C") -> Int32:
+    """Frames rendered for the worklet so far."""
+    return Int32(_host(app)[].audio_rendered)
