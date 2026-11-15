@@ -116,6 +116,7 @@ struct Host(Movable):
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
     var palette_dropped: Int  # skinned members that did not fit PALETTE_MATRICES, counted since the page started
+    var crowd_culled: Int  # W11: crowd members outside the view, not skinned, counted since the page started
     var palette_used: Int  # matrices in the last frame's skinned palette
     var shadow: Optional[ShadowPass]  # the sun's depth pass into the mesh pass's shadow map; made on the first shadowed frame
     var shadow_on: Bool  # ?noshadow turns the shadow factor and its pass off; on by default
@@ -165,6 +166,7 @@ struct Host(Movable):
         self.tex_job = None
         self.b3_job = None
         self.palette_dropped = 0
+        self.crowd_culled = 0
         self.palette_used = 0
         self.shadow = None
         self.shadow_on = True
@@ -216,6 +218,7 @@ struct Host(Movable):
         self.shadow_on = move.shadow_on
         self.b3_job = move.b3_job^
         self.palette_dropped = move.palette_dropped
+        self.crowd_culled = move.crowd_culled
         self.palette_used = move.palette_used
         self.net_run = move.net_run^
         self.net_on = move.net_on
@@ -251,7 +254,8 @@ struct Host(Movable):
             self.renderer.value().push(item)
         if self.net_on and self.net_run:
             self._net_markers()
-        self._characters(m.world.player_pos(), m.world.player_vel())  # read while the world is held here, not inside _characters
+        var cview = View(m.camera(), Real(Float64(self.width) / Float64(self.height)))  # the crowd's visible set (W11 LOD)
+        self._characters(m.world.player_pos(), m.world.player_vel(), cview)  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
         var light = _light_vp()
@@ -306,7 +310,7 @@ struct Host(Movable):
         self.wall_mesh = self.renderer.value().meshes.add_static(cube[0].copy(), cube[1].copy(), cube[2].copy(), cube[3].copy())
         self.placed = True
 
-    def _characters(mut self, player: Vec3, vel: Vec3) raises:
+    def _characters(mut self, player: Vec3, vel: Vec3, view: View) raises:
         """Each frame: the two characters' palettes (one clip sampled at the clock, the rest pose's ancestors applied),
         their skinned draw items, and the palette buffer the renderer reads."""
         if not self.placed:
@@ -335,6 +339,7 @@ struct Host(Movable):
         # The palette is a list of floats, 16 per matrix; pose_id is a matrix index.
         var crowd_rows = List[CrowdRow]()
         var crowd_bases = List[Int]()
+        var crowd_idx = List[Int]()  # the row of each base: the members the palette holds, in the frustum
         if self.crowd:
             if self.crowd_ext:
                 crowd_rows = self.ext_rows.copy()
@@ -345,12 +350,19 @@ struct Host(Movable):
                 self.crowd = cs^
             # the palette holds PALETTE_MATRICES matrices. A member that would not fit is dropped with the rest after
             # it (the newest entries), and the count is kept in palette_dropped: the frame still draws.
+            # W11 far-member LOD: a member outside the view (with a 20 % margin, so none pops at the edge) gets no palette
+            # and no draw; its row is still stepped (by the worker or the page). Counted in crowd_culled.
             for k in range(len(crowd_rows)):
+                var cp = view.project(Vec3(Real(crowd_rows[k].x), Real(0.9), Real(crowd_rows[k].z), Real(0.0)))
+                if not (cp.w > view.near and abs(cp.x) <= cp.w * Real(1.2) and abs(cp.y) <= cp.w * Real(1.2)):
+                    self.crowd_culled += 1
+                    continue
                 if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
                     self.palette_dropped += len(crowd_rows) - k
                     break
                 var fr = (Int(self.clock * Float64(c.fps)) + crowd_rows[k].offset) % c.frames
                 crowd_bases.append(len(pal) // 16)
+                crowd_idx.append(k)
                 pal.extend(pose_palette_frame(c, fr))
         # the town (plan stage 3): 24 residents and the guard, each a CesiumMan at its ORCA position, its clip phase spread
         var town_rows = List[Vec3]()
@@ -401,8 +413,8 @@ struct Host(Movable):
         self.prot.append(Float64(player[2]))
         self.prot.append(Float64(atan2(vel[0], vel[2])) if speed >= 0.2 else prot_heading)
         # the crowd: each member at its position on the floor (the flow field's), feet on the ground
-        for k in range(len(crowd_bases)):  # the members that fit the palette (the rest were dropped above)
-            var r = crowd_rows[k]
+        for k in range(len(crowd_bases)):  # the members that fit the palette and the view (the rest were dropped above)
+            var r = crowd_rows[crowd_idx[k]]
             var pos = Vec3(Real(r.x), Real(0.0), Real(r.z), Real(0.0))
             self.renderer.value().push(DrawItem(
                 -1, pos, 0.0, 0.0, 0.0, 1.0,
@@ -924,6 +936,12 @@ def playground_host_town_on_screen(app: UInt64) abi("C") -> Int32:
             n += 1
     h[].town = tn^
     return n
+
+
+@export
+def playground_host_crowd_culled(app: UInt64) abi("C") -> Int32:
+    """W11 LOD: crowd members outside the view since the page started (not skinned, not drawn)."""
+    return Int32(_host(app)[].crowd_culled)
 
 
 @export

@@ -220,7 +220,13 @@ need(await drawOnce(), 'crowd guard: a frame with the town switched on is drawn'
 const usedOn = await js('window.host.x.playground_host_palette_used(window.host.app)');
 const dropAfter = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
 console.log(`crowd guard: palette ${usedOff} matrices with 213 members and no town; ${usedOn} with the town on; dropped ${dropAfter - dropBase}`);
-need(dropAfter > dropBase, `crowd guard: the town switched on after a full crowd is dropped and counted (${dropAfter - dropBase} members)`);
+// W11 far-member LOD: members outside the view are not skinned, so 213 members from the hub's camera no longer fill the
+// palette and the town-on drop path is not reached from this view. What must hold: the palette never passes its capacity
+// with the town on, and the LOD counter moved (members were culled and not skinned).
+need(usedOn <= 4096, `crowd guard: the palette stays within its 4096 matrices with the town on (${usedOn})`);
+const culled = await js('window.host.x.playground_host_crowd_culled(window.host.app)');
+need(culled > 0, `crowd guard: members outside the view are culled and not skinned (${culled} counted)`);
+console.log(`crowd guard: drop path not reached from this view (dropped ${dropAfter - dropBase}); LOD culled ${culled}`);
 await js('window.host.x.playground_host_crowd(window.host.app, 0)');
 console.log(problems.length ? `host-check: FAIL\n  ${problems.join('\n  ')}` : 'host-check: PASS');
 done(problems.length ? 1 : 0);
