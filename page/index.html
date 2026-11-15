@@ -10,7 +10,7 @@ p{text-align:center;margin:8px 12px}
 </style>
 </head><body>
 <canvas id="canvas" width="960" height="540"></canvas>
-<p id="hud"><button id="crowd" type="button">crowd: off</button> <button id="backend" type="button">crowd backend: sparse-set</button> <button id="net" type="button">netcode: run the lossy session</button> <span id="netout"></span></p>
+<p id="hud"><button id="crowd" type="button">crowd: off</button> <button id="backend" type="button">crowd backend: sparse-set</button> <button id="net" type="button">netcode: run the lossy session</button> <span id="netout"></span><br><label>latency <input id="lat" type="range" min="0" max="30" value="4"> <span id="latv">4</span> ticks</label> <label>jitter <input id="jit" type="range" min="0" max="10" value="3"> <span id="jitv">3</span></label> <label>loss <input id="los" type="range" min="0" max="50" value="10"> <span id="losv">10</span> %</label></p>
 <p>WASD or arrows move, Space jumps, drag with the left button to look, P pauses, R restarts.</p>
 <p><a href="credits.html">Credits</a></p>
 <pre id="log"></pre>

@@ -97,9 +97,13 @@ need(m6 === M6_NATIVE_HASH, `M6: the page's motion matching returns the same 20 
 // Step 8 (netcode): the session over SnapshotServer / SnapshotClient through a lossy link reaches tick 120 on every
 // peer, and every peer's hash equals the reference. The value is the reference hash; native prints the same (765407476).
 const NET_NATIVE = 765407476;
-const net = await js('window.host.x.playground_host_net_check()');
+const net = await js('window.host.x.playground_host_net_check(4, 3, 100)');
 console.log(`netcode session on the page: ${net} (native ${NET_NATIVE})`);
 need(net === NET_NATIVE, `netcode: the page's session converges and equals native (code ${net})`);
+// a non-default link (150 ms one way, jitter 5, 20 % loss): the session still converges to the same reference hash
+const netFar = await js('window.host.x.playground_host_net_check(9, 5, 200)');
+console.log(`netcode at 150 ms, jitter 5, 20 % loss: ${netFar}`);
+need(netFar === NET_NATIVE, `netcode at a non-default link converges and equals the reference (code ${netFar})`);
 // the HUD's netcode button shows the same result as text on the page
 await js("document.getElementById('net').click()");
 const netText = await js("document.getElementById('netout').textContent");

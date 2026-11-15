@@ -506,12 +506,15 @@ def playground_host_motion_hash(app: UInt64) abi("C") -> Int32:
 
 
 @export
-def playground_host_net_check() abi("C") -> Int32:
-    """Step 8 (netcode): the Frontier's session over SnapshotServer and SnapshotClient through a lossy SimLink (jitter 3,
-    10 % loss), in the page's wasm. Returns the reference hash (mod 1000000007) when every client reaches tick 120 and
-    every client and the server equal it; -1 otherwise. tests/frontier_net_native.mojo prints the same number."""
+def playground_host_net_check(latency: Int32, jitter: Int32, loss_permille: Int32) abi("C") -> Int32:
+    """Step 8 (netcode): the Frontier's session over SnapshotServer and SnapshotClient through a lossy SimLink, with the
+    page's sliders: latency in ticks (0 to 30), jitter in ticks (0 to 10), loss in tenths of a percent (0 to 500). The
+    default (4, 3, 100) is the check the HUD ran before the sliders. Returns the reference hash (mod 1000000007) when every
+    client reaches tick 120 and every client and the server equal it; -1 otherwise; -3 if a slider is out of range."""
+    if latency < 0 or latency > 30 or jitter < 0 or jitter > 10 or loss_permille < 0 or loss_permille > 500:
+        return -3
     try:
-        var r = run_session(4, 3, Real(0.1), UInt64(2026), 120)
+        var r = run_session(Int(latency), Int(jitter), Real(Float64(loss_permille) / 1000.0), UInt64(2026), 120)
         if r[0] and r[1]:
             return Int32(r[2])
         return -1
