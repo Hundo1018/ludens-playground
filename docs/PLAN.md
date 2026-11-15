@@ -32,7 +32,7 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
   about a day the engine served no Frontier page. This cannot be undone and is recorded here.
 - Step status (evidence): 1 engine seam is generic (`app/main.mojo` and `game/mode.mojo` use `M: GameMode`; playground
   `frontier` runs through it). 4 asset pipeline: `python3 scripts/fetch_assets.py --check` reports 19 manifest entries
-  consistent with credits (run in CI). 5, 7, 8 and stage 2: not started.
+  consistent with credits (run in CI). 5, 7, 8 are done in the narrowed list; stage 2 (physics) is not in the step list, see "Review findings" (W7).
 
 ## Steps, in order
 
@@ -55,6 +55,84 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
    backends. Count from a measured budget, not a promise.
 8. **Range networking (5).** Authoritative server in a second module, `SnapshotServer` / `SnapshotClient`, `SimLink`
    latency controls, lag-compensated hits. Reuses the engine's `gameplay/netcode`.
+
+## Review findings (2026-11-15) and the work they set
+
+Source: a headless review of the page (SwiftShader), committed as `scripts/review_probe.mjs` (wrapper `scripts/review_probe.py`), and a code read.
+Tags: **[measured]** a probe number, **[code]** read from the source, not seen on a frame.
+
+### Findings
+
+Severity order. Each finding names the user feedback item it touches (the user's five points, 2026-11-15).
+
+| # | Finding | Tag | Feedback |
+|---|---|---|---|
+| F1 | No camera control from the mouse or pad. `Frontier.update` already applies `intent.look_dx/look_dy`, but `page/app.js` forwards only `EV_KEY` events and the pad's `look()` is empty, so the yaw never changes. The HUD says "DRAG MOUSE LOOK". Arrow keys strafe (engine `controls.mojo`). A 300 px drag changed 45,077 px of 518,400; idle changed 46,566. | measured + code | #2 |
+| F2 | No objective and no loop: no goal, score, win or loss. Four zones differ only by ground colour and prop layout. | code | — |
+| F3 | Threat without consequence: the guard (speed 2.2 m/s) cannot catch the player (9 m/s), and contact does nothing. Guard and residents share one model and colour. | code | — |
+| F4 | Crowd members, town residents and the guard are drawn with identity rotation, so they do not face their travel direction. (The Fox does face its circle's tangent.) | code | #4 |
+| F5 | The Fox moves at a constant 1.5 m/s on its circle while its clip cycles Survey, Walk and Run every 4 s, so the walk speed does not match the clip. | code | #4 |
+| F6 | Characters pass through people and pillars: the crowd navmesh is a 40 m flat square with no holes, and hub pillars lie inside it. | code | #3 |
+| F7 | HUD shows debug counters, and `FRAME` is always `0.0 MS` in green because `frame_ms` is never assigned. | measured (0.0) + code | — |
+| F8 | No sound. Four CC0 effects are in the manifest as `.lsound` sources, but no build step converts them into the page and the host has no audio path. | code | — |
+| F9 | Demo features hide behind URL parameters (`?netview`, `?crowd`), so a visitor never sees them. | code | — |
+| F10 | Physics category absent. No fracture wall, cloth, rope or soft body; only stacks and balls. PLAN.md's "Current state" still says stage 2 is "not started", while the step list has no physics step. | code | — |
+| F11 | Town zone empty: 23 residents on screen at the hub, 0 in each of the four zones. The residents are in the hub because the town is built on the floor at the origin. | measured | #3 |
+| F12 | The step-7 crowd walks to the centre, where the player spawns, and stops within 0.6 m. | code | #3 |
+| F13 | The protagonist is a blue box and sphere (`frontier/world.mojo` `draw_items`). Separately, `host.mojo` `_characters` draws a CesiumMan at a fixed point 6 m ahead of the eye and 1.5 m left, every frame, so it looks as if it walks in place in every zone. | measured (same screen spot in three zones) + code | #4 |
+| F14 | Ray tracing is absent (shadows only). The original design's AO and reflections (stage 7) were removed from the plan. | code | #5 |
+| F15 | The original seven categories (Rendering, Physics, Animation, AI, Streaming, Networking, Optimization) have no default-view showcase for Physics, and only partial showcases for the rest. | code | — |
+
+### Work, in order
+
+Each item states its acceptance check, observable from the page or a native test. A step is done when its check passes three runs in a row and its PR is merged.
+
+**W2 Frame time shown (F7).** Add `playground_host_set_frame_ms(app, ms: Float64)` in `app/host.mojo`, called from `page/app.js` with the measured frame time. Add `playground_host_frame_ms(app) -> Float64` for the check. Acceptance: `host_check` asserts `frame_ms > 0` after 10 frames and the HUD text shows a value other than `0.0`.
+
+**W1 Camera turns with input (F1, F9).**
+- Forward pointer events from `page/app.js` to the host: mouse drag while the button is held, and the pad's look stick. First `grep -n "EV_\|kind ==" build/deps/ludens-engine/app/controls.mojo app/host.mojo` to find the event kinds the host reads, and check the engine's `shell/web` forwarding (pointerdown/move/up). Expected to be page-only; if a grep shows an engine change is needed, it is an engine PR then a pin bump.
+- Add `Frontier.stat` index 10 = yaw in milliradians, so `scripts/frontier_check.mjs` and the new check read it through the same index-based path.
+- Acceptance: `scripts/look_check.mjs` (new) dispatches a 300 px drag and asserts the yaw changes by 300 × 0.006 rad within 1 %; a drag of 0 px leaves it unchanged.
+- The HUD keeps "DRAG MOUSE LOOK" only after this check passes.
+
+**W3 Protagonist as a character (F4, F5, F13).** Two parts, in this order.
+1. Delete the eye-relative CesiumMan in `host.mojo` `_characters`. Acceptance: no skinned draw is placed relative to the camera (grep and a native test on the draw list).
+2. Replace the protagonist's blue primitive with a skinned character at the player's position. Heading = yaw. The clip is chosen by player speed: Survey below 0.2 m/s, Walk up to the Walk clip's speed, Run above it. The Fox's 4 s cycle goes away. Acceptance: an export `playground_host_player_pose(app) -> (x, z, heading)` and a check that over 120 ticks of walking the drawn position equals the player's position within 1 cm and the heading equals the velocity heading within 5 degrees.
+- Asset policy: the player uses CesiumMan only if its texture rule is satisfied (see Decisions: CesiumMan is untextured for the logo reason), so the protagonist is the Fox or another CC-BY/CC0 character. Decide in W3 and record it in Decisions.
+
+**W4 Crowd purpose and the town (F12, F3, F11, F6 town half).**
+- The step-7 crowd's goal changes from the centre to a corner route (the residents' route from `app/town.mojo`), so it no longer walks to the player.
+- The town moves into the TOWN zone: a navmesh is baked over the town cell around (112, 112) with building footprints as holes (card 3's design). The hub count drops to 0 and the TOWN count is the resident count. Acceptance: `playground_host_town_on_screen` is 0 at the hub and > 0 at the TOWN position, and a native test asserts every resident stays inside the cell.
+- Guard: a distinct colour and a model that differs from residents. Its rule is W6's.
+
+**W5 Hub pillars for the step-7 crowd (F6 hub half).** Bake the floor's navmesh with holes for the hub pillars (the arena's `_nav_box` approach). Acceptance: a native test asserts no crowd member's position lies in a pillar's footprint over 1200 ticks; the count is 0.
+
+**W6 One objective loop (F2, F3).**
+- One marker per zone, on the zone's route, and a counter in the HUD: `GOAL 0/4`, then `4/4` when all four are reached.
+- The guard's rule: it runs at 7 m/s on the TOWN route and stops the player on contact (the player is returned to the hub and an event is counted). Raising its speed is a tuning change in W4's `GUARD_SPEED`, recorded in its PR.
+- Acceptance: a native test teleports to each marker and asserts four completion events, each counted once, and a contact event resets the player.
+
+**W8 Sound (F8).** Wire `scripts/convert_wav.py` into `build_page.sh` and `assets/index.json`, so the four `.lsound` files are in `build/page/assets/`. Before claiming a host audio path, `grep -rn "add_clip_pcm" build/deps/ludens-engine` and record the result. Audio starts after a user gesture (browser rule): the first key or pointer event starts the audio context. Acceptance: a host counter reads 1 after the first objective completion and the file is loaded (`host.audio_played == 1`).
+
+**W7 Physics zone (F10, F15).** Restore one physics showcase from the original stage 2: a fracture wall in the quarry, broken by the pendulum. Acceptance: fragments count goes from 0 to > 0 after a pendulum hit, asserted in `scripts/physics_check.mjs` (new). Cloth and rope come after this step is measured.
+
+**W9 Default view and HUD (F7, F9, F15).**
+- The page keeps the crowd default off, per the step-7 rule (`crowdOn = false`, count 0 on this device).
+- Netview: default on or off is the user's decision; this plan records it as on, labelled, with a DOM toggle, and the user can change it.
+- Visible, labelled DOM toggles for netview and crowd. Debug counters move behind `?debug`. HUD shows the zone, the objective, and the frame time.
+- Acceptance: `frontier_check.mjs` and `host_check.mjs` still pass; `scripts/stage_shots.py` produces the default page's screenshot, attached to the PR.
+
+**W10 Ray tracing (F14).** Feasibility first: `grep -n "ComputePipeline\|Dispatch\|StorageBuffer" build/deps/wgpu-mojo/web/implemented.txt`. Then the stage 7 check: a GPU BVH AO hit test agrees per ray with CPU `BVH.raycast` (t within 1e-3). The HUD label is "software ray-traced AO". If a WebGPU function is missing, it is a wgpu-mojo PR then a pin bump.
+
+**W11 Crowd in its own Worker, far-member LOD (F15, original Optimization design).** The 3b crowd moves to its own Worker with a far-member LOD; the main thread keeps only the visible set. Acceptance: the Worker's tick time is reported, and the page's frame time with 100 members is below the step-7 number recorded in this file. Open until measured.
+
+### Order and stopping rule
+
+W2, W1, W3, then W4 with W5, W6, W8, W7, W9, W10, W11. Each step is one PR. An engine or wgpu-mojo change is that repo's PR, then a pin bump here. Stop and report only when CI cannot verify a step.
+
+### Status note
+
+The status table's "done" means the narrowed eight steps. Physics (W7), ray tracing (W10) and the 3b Worker (W11) are open against the original categories, and this section is the work order for them.
 
 ## Texture measurement (step 5, hub frame, `?offscreen` on and `?offscreen&notex` off)
 
