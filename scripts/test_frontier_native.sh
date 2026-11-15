@@ -68,6 +68,13 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/town_native.mojo --target native -o build/town_native
 build/town_native
+# Reference baseline E1: the town's characters pick walk or run by motion matching on their speed.
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/town_motion_native.mojo --target native -o build/town_motion_native
+build/town_motion_native
 # Step 5 shadow probe: a depth texture through a comparison sampler, natively (plan step 5).
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
