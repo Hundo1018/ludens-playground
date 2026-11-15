@@ -708,6 +708,39 @@ def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
 
 
 @export
+def playground_host_frontier_stat(app: UInt64, which: Int32) abi("C") -> Int32:
+    """The Frontier world's numbers (frontier/world.mojo STAT_*): cells loaded and total, props live and total, drawn,
+    culled, loads, unloads, the zone the player is in, the tick. -1 when there is no Frontier world yet or which is out
+    of range."""
+    var h = _host(app)
+    if not h[].world:
+        return -1
+    try:
+        return Int32(h[].world.value().world.stat(Int(which)))
+    except e:
+        print("playground_host_frontier_stat:", e)
+        return -1
+
+
+@export
+def playground_host_frontier_teleport(app: UInt64, x: Int32, z: Int32) abi("C") -> Int32:
+    """Put the player at (x, z) metres at once, and stream for that place (fast travel). Returns 0; -1 when there is no
+    Frontier world; -2 if the teleport failed (printed)."""
+    var h = _host(app)
+    if not h[].world:
+        return -1
+    var m = h[].world.take()
+    try:
+        m.world.teleport(Real(Float64(x)), Real(Float64(z)))
+        h[].world = m^
+        return 0
+    except e:
+        print("playground_host_frontier_teleport:", e)
+        h[].world = m^
+        return -2
+
+
+@export
 def playground_host_palette_used(app: UInt64) abi("C") -> Int32:
     """Step 7: matrices in the last frame's skinned palette (the characters, the crowd and the town)."""
     return Int32(_host(app)[].palette_used)
