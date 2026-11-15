@@ -62,6 +62,11 @@ comptime STAT_UNLOADS = 7
 comptime STAT_ZONE = 8
 comptime STAT_TICK = 9
 comptime STAT_YAW_MRAD = 10  # the camera yaw in milliradians (W1: the mouse and pad look)
+comptime STAT_FREE_FRAGMENTS = 11  # fragments of the quarry wall that have come loose (W7; 0 while the wall stands)
+comptime STAT_FRAGMENTS = 12  # fragments the quarry wall was cut into (W7)
+comptime QUARRY_WALL = Vec3(112.0, 8.0, -112.0, 0.0)  # W7: the quarry's fractured wall, released 6 m up (plan card 2a)
+comptime QUARRY_WALL_HALF = Vec3(4.0, 2.0, 0.3, 0.0)
+comptime QUARRY_RELEASE_R = Real(20.0)  # W7: the wall is released when the player comes this close (metres)
 
 comptime FNV_PRIME = UInt64(0x100000001B3)
 
@@ -144,6 +149,8 @@ struct Frontier(Movable):
     var drawn: Int
     var culled: Int
     var culling: Bool  # False draws every loaded item: what culling saves can be measured
+    var wall_released: Bool  # W7: the fractured wall exists (it is added when the player comes near)
+    var fracture_events: Int  # fracture events (bonds broken or fragments evicted) since the start (W7)
 
     def __init__(out self) raises:
         self.world = EmbedWorld(1.0 / 60.0, G)
@@ -160,6 +167,8 @@ struct Frontier(Movable):
         self.drawn = 0
         self.culled = 0
         self.culling = True
+        self.wall_released = False
+        self.fracture_events = 0
         self.player = DynamicCharacter.spawn(
             self.world.scene,
             QuatBody6.at_rest(Vec3(0.0, 1.0, 0.0, 0.0), Inertia3.box(80.0, 0.3, 0.9, 0.3)),
@@ -185,6 +194,8 @@ struct Frontier(Movable):
         self.drawn = move.drawn
         self.culled = move.culled
         self.culling = move.culling
+        self.wall_released = move.wall_released
+        self.fracture_events = move.fracture_events
 
     # ------------------------------------------------------------------------------------------------- building
 
@@ -334,6 +345,12 @@ struct Frontier(Movable):
             return self.tick
         if which == STAT_YAW_MRAD:
             return Int(self.yaw * 1000.0)
+        if which == 14:  # fracture events since the start (W7)
+            return self.fracture_events
+        if which == STAT_FREE_FRAGMENTS:
+            return self.world.fracture.free_count() if self.world.fracture_on else 0
+        if which == STAT_FRAGMENTS:
+            return self.world.fracture.fragments() if self.world.fracture_on else 0
         return -1
 
     def hash(self) -> UInt64:
@@ -393,6 +410,13 @@ struct Frontier(Movable):
                 culled += 1
                 continue
             out.append(w.copy())
+        # the quarry wall's fragments, each drawn at its own pose (plan card 2a: a box per fragment)
+        if self.world.fracture_on:
+            for i in range(self.world.fracture.fragments()):
+                var fh = self.world.fragment_handle(i)
+                var fs = self.world.state(fh)
+                out.append(DrawItem(0, fs.pos, Float64(fs.rot.x), Float64(fs.rot.y), Float64(fs.rot.z), Float64(fs.rot.w),
+                                    Vec3(0.3, 0.3, 0.15, 0.0), Vec3(0.55, 0.5, 0.45, 0.0)))
         # the player is drawn by the host as a skinned character (plan W3), not here
         self.drawn = len(out)
         self.culled = culled
@@ -448,4 +472,12 @@ struct Frontier(Movable):
             self.world.apply_impulse(self.player_h, Vec3(0.0, JUMP_IMPULSE, 0.0, 0.0))
         if self.tick % STREAM_TICKS == 0:
             self._stream()
+        if not self.wall_released:
+            var p = self.player_pos()
+            var dx = p[0] - QUARRY_WALL[0]
+            var dz = p[2] - QUARRY_WALL[2]
+            if dx * dx + dz * dz < QUARRY_RELEASE_R * QUARRY_RELEASE_R:
+                _ = self.world.add_fracture_box(QUARRY_WALL, QUARRY_WALL_HALF, 40, 7, 5e1, 2000.0)
+                self.wall_released = True  # the wall falls from 6 m when the player comes near (plan W7)
         self.world.physics_tick()
+        self.fracture_events += len(self.world.frame_fracture)
