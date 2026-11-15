@@ -98,6 +98,7 @@ struct Host(Movable):
     var ground_loaded: Bool
     var fox_tex: Optional[List[List[UInt8]]]  # the Fox's own base colour (layer 3), from its GLB
     var fox_tex_loaded: Bool
+    var no_tex: Bool  # debug (?notex): the ground and Fox textures are not uploaded, so the same frame shows the untextured look
     var clock: Float64  # seconds of animation, advanced per frame
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
     var skin_cesium: Int
@@ -135,6 +136,7 @@ struct Host(Movable):
         self.ground_loaded = False
         self.fox_tex = None
         self.fox_tex_loaded = False
+        self.no_tex = False
         self.clock = 0.0
         self.placed = False
         self.skin_cesium = -1
@@ -172,6 +174,7 @@ struct Host(Movable):
         self.ground_loaded = move.ground_loaded
         self.fox_tex = move.fox_tex^
         self.fox_tex_loaded = move.fox_tex_loaded
+        self.no_tex = move.no_tex
         self.clock = move.clock
         self.placed = move.placed
         self.skin_cesium = move.skin_cesium
@@ -210,10 +213,10 @@ struct Host(Movable):
     def _register(mut self) raises:
         """Once both characters and the wall are on the page: their meshes and the texture layer go to the renderer.
         The ground texture is uploaded on its own, as soon as both it and the renderer are there."""
-        if self.ground and not self.ground_loaded and self.renderer:
+        if self.ground and not self.ground_loaded and self.renderer and not self.no_tex:
             self.renderer.value().textures.load_layer(self.boot.device(), UInt32(2), self.ground.value().copy())
             self.ground_loaded = True
-        if self.fox_tex and not self.fox_tex_loaded and self.renderer:
+        if self.fox_tex and not self.fox_tex_loaded and self.renderer and not self.no_tex:
             self.renderer.value().textures.load_layer(self.boot.device(), UInt32(3), self.fox_tex.value().copy())
             self.fox_tex_loaded = True
         if self.placed or not self.cesium or not self.fox or not self.wall:
@@ -563,6 +566,12 @@ def playground_host_town_on_screen(app: UInt64) abi("C") -> Int32:
             n += 1
     h[].town = tn^
     return n
+
+
+@export
+def playground_host_notex(app: UInt64, on: Int32) abi("C"):
+    """Debug (?notex): on=1 keeps the ground and Fox textures out of the GPU, for a controlled untextured comparison."""
+    _host(app)[].no_tex = on != 0
 
 
 @export
