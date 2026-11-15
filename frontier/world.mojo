@@ -65,11 +65,16 @@ comptime STAT_YAW_MRAD = 10  # the camera yaw in milliradians (W1: the mouse and
 comptime STAT_FREE_FRAGMENTS = 11  # fragments of the quarry wall that have come loose (W7; 0 while the wall stands)
 comptime STAT_FRAGMENTS = 12  # fragments the quarry wall was cut into (W7)
 comptime STAT_GOALS = 15  # zone goals reached, 0 to 4 (W6)
+comptime STAT_BOB_Z_MM = 16  # B1: the pendulum bob's z in millimetres; -1 before the pendulum exists
 comptime GOAL_R: Real = 4.0  # a goal is reached within this distance (metres)
 comptime GOAL_COUNT = 4
-comptime QUARRY_WALL = Vec3(112.0, 8.0, -124.0, 0.0)  # W7: the quarry's fractured wall, released 6 m up, 12 m past the quarry goal (plan card 2a)
+comptime QUARRY_WALL = Vec3(112.0, 2.0, -124.0, 0.0)  # the quarry's fractured wall, standing on the ground 12 m past the quarry goal (plan card 2a)
 comptime QUARRY_WALL_HALF = Vec3(4.0, 2.0, 0.3, 0.0)
-comptime QUARRY_RELEASE_R = Real(20.0)  # W7: the wall is released when the player comes this close (metres)
+comptime QUARRY_RELEASE_R = Real(20.0)  # the wall and the pendulum are added when the player comes this close (metres)
+comptime PENDULUM_PIVOT = Vec3(112.0, 12.0, -124.0, 0.0)  # reference baseline B1: a hinge 10 m above the wall's top
+comptime PENDULUM_LEN = Real(9.0)  # the bob hangs 9 m below the pivot, level with the wall's middle at the bottom of its swing
+comptime PENDULUM_MASS = Real(2000.0)  # a wrecking ball: tests/pendulum_native.mojo measures 500 kg not breaking the wall, 2000 kg breaking it
+comptime PENDULUM_BOB_R = Real(1.0)
 
 comptime FNV_PRIME = UInt64(0x100000001B3)
 
@@ -168,6 +173,8 @@ struct Frontier(Movable):
     var goal_done: List[Bool]  # W6: one goal per zone, at its fast-travel point; each counted once
     var goal_count: Int
     var wall_released: Bool  # W7: the fractured wall exists (it is added when the player comes near)
+    var pendulum_anchor: Int64  # B1: the hinge's static anchor, -1 until the wall is added
+    var pendulum_bob: Int64  # B1: the 2000 kg bob on the hinge, -1 until the wall is added
     var fracture_events: Int  # fracture events (bonds broken or fragments evicted) since the start (W7)
 
     def __init__(out self) raises:
@@ -193,6 +200,8 @@ struct Frontier(Movable):
         self.goal_count = 0
         self.wall_released = False
         self.fracture_events = 0
+        self.pendulum_anchor = -1
+        self.pendulum_bob = -1
         self.player = DynamicCharacter.spawn(
             self.world.scene,
             QuatBody6.at_rest(Vec3(0.0, 1.0, 0.0, 0.0), Inertia3.box(80.0, 0.3, 0.9, 0.3)),
@@ -224,6 +233,8 @@ struct Frontier(Movable):
         self.goal_count = move.goal_count
         self.wall_released = move.wall_released
         self.fracture_events = move.fracture_events
+        self.pendulum_anchor = move.pendulum_anchor
+        self.pendulum_bob = move.pendulum_bob
 
     # ------------------------------------------------------------------------------------------------- building
 
@@ -375,6 +386,8 @@ struct Frontier(Movable):
             return Int(self.yaw * 1000.0)
         if which == 14:  # fracture events since the start (W7)
             return self.fracture_events
+        if which == STAT_BOB_Z_MM:
+            return Int(self.world.state(self.pendulum_bob).pos[2] * Real(1000.0)) if self.pendulum_bob >= 0 else -1
         if which == STAT_GOALS:
             return self.goal_count
         if which == STAT_FREE_FRAGMENTS:
@@ -447,6 +460,15 @@ struct Frontier(Movable):
                 var fs = self.world.state(fh)
                 out.append(DrawItem(0, fs.pos, Float64(fs.rot.x), Float64(fs.rot.y), Float64(fs.rot.z), Float64(fs.rot.w),
                                     Vec3(0.3, 0.3, 0.15, 0.0), Vec3(0.55, 0.5, 0.45, 0.0)))
+        # B1: the pendulum: the anchor, the bob, and the rod between them (along the bob's local z, the hinge's lever)
+        if self.pendulum_bob >= 0:
+            var bs = self.world.state(self.pendulum_bob)
+            out.append(DrawItem(0, PENDULUM_PIVOT, 0.0, 0.0, 0.0, 1.0, Vec3(0.5, 0.5, 0.5, 0.0), Vec3(0.35, 0.3, 0.25, 0.0)))
+            out.append(DrawItem(1, bs.pos, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
+                                Vec3(PENDULUM_BOB_R, PENDULUM_BOB_R, PENDULUM_BOB_R, 0.0), Vec3(0.25, 0.25, 0.28, 0.0)))
+            var mid = (bs.pos + PENDULUM_PIVOT) * Real(0.5)
+            out.append(DrawItem(0, mid, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
+                                Vec3(0.1, 0.1, PENDULUM_LEN * Real(0.5), 0.0), Vec3(0.4, 0.35, 0.3, 0.0)))
         # the player is drawn by the host as a skinned character (plan W3), not here
         self.drawn = len(out)
         self.culled = culled
@@ -520,8 +542,16 @@ struct Frontier(Movable):
             var dx = p[0] - QUARRY_WALL[0]
             var dz = p[2] - QUARRY_WALL[2]
             if dx * dx + dz * dz < QUARRY_RELEASE_R * QUARRY_RELEASE_R:
+                # Reference baseline B1 (original stage 2, a destructible wall and a jointed machine): the wall stands on
+                # the ground, and a 2000 kg bob on a hinge 9 m long is released level with the pivot, on the player's side.
+                # It swings down and hits the wall at the bottom of its swing, about 1.5 s later.
                 _ = self.world.add_fracture_box(QUARRY_WALL, QUARRY_WALL_HALF, 40, 7, 5e1, 2000.0)
-                self.wall_released = True  # the wall falls from 6 m when the player comes near (plan W7)
+                self.pendulum_anchor = self.world.add_box(PENDULUM_PIVOT, Vec3(0.4, 0.4, 0.4, 0.0), 0.0, True)
+                var bob_start = PENDULUM_PIVOT + Vec3(0.0, 0.0, PENDULUM_LEN, 0.0)
+                self.pendulum_bob = self.world.add_sphere(bob_start, PENDULUM_BOB_R, PENDULUM_MASS, False)
+                _ = self.world.add_hinge_joint(self.pendulum_anchor, self.pendulum_bob, Vec3(0.0, 0.0, 0.0, 0.0),
+                                               Vec3(0.0, 0.0, -PENDULUM_LEN, 0.0), Vec3(1.0, 0.0, 0.0, 0.0))
+                self.wall_released = True
         self.world.physics_tick()
         self.fracture_events += len(self.world.frame_fracture)
         self._check_goals()
