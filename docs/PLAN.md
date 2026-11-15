@@ -79,6 +79,10 @@ Ground tiles (half height at most 0.1 m) now draw on the mesh pass with layer 2 
 - Stage 2 physics: not a step of this plan. `docs/PLAN.md` has no physics step; it lives in `docs/frontier_plan.md`, which this plan supersedes.
 - Step 7: `SYNC=1` fails in this container; `GPU_SYNC=1` returns frame counts that grow about fivefold per sample, so the timing is environment-limited. The 3b-0 `ecs.World` vs OOP probe is still to run, natively.
 
+## Probe 3b-0: crowd step per ECS backend against an object list (step 7)
+
+`benchmarks/crowd_3b0.mojo`, native, 30 samples per row, median ms per step: N = 10,000: sparse-set 0.38, naive 0.54, OOP list 0.42. N = 50,000: sparse-set 1.90, naive 2.41, OOP 2.28. N = 100,000: sparse-set 3.22, naive 2.46, OOP 2.94. The OOP list does not run the flow field, so it is a floor for the object layout, not the same workload. At 1e5 the naive backend is faster than sparse-set, the reverse of the smaller counts; the sparse-set cost grows faster. Native only: a browser step at 1e5 is measured on the page (`crowd_bench.mjs`), where the GPU readback is the limit, not this step.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
