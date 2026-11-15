@@ -119,6 +119,14 @@ struct Lcg:
         return lo + (hi - lo) * self.unit()
 
 
+@fieldwise_init
+struct StaticBox(Copyable, ImplicitlyCopyable, Movable):
+    """A static box of the map: centre and half extents, in metres (the town's navmesh holes come from these)."""
+
+    var c: Vec3
+    var h: Vec3
+
+
 struct Frontier(Movable):
     var world: EmbedWorld
     var part: WorldPartition
@@ -273,6 +281,21 @@ struct Frontier(Movable):
 
     def player_pos(self) raises -> Vec3:
         return self.world.state(self.player_h).pos
+
+    def static_boxes(self, x0: Real, z0: Real, x1: Real, z1: Real, min_height: Real) -> List[StaticBox]:
+        """The static boxes of the map whose centre is in the square [x0, x1] x [z0, z1] and whose half height is over
+        min_height: the buildings, for the town's navmesh. Read from the same specs the streaming loads."""
+        var out = List[StaticBox]()
+        for i in range(len(self.part.specs)):
+            ref s = self.part.specs[i]
+            if s.kind != SPEC_BOX or not s.is_static or s.half[1] <= min_height:
+                continue
+            var x = Real(s.pos.x)
+            var z = Real(s.pos.z)
+            if x < x0 or x > x1 or z < z0 or z > z1:
+                continue
+            out.append(StaticBox(Vec3(x, Real(s.pos.y), z, 0.0), s.half))
+        return out^
 
     def player_vel(self) raises -> Vec3:
         return self.world.state(self.player_h).vel
