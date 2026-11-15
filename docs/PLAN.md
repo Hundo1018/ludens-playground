@@ -83,6 +83,12 @@ Ground tiles (half height at most 0.1 m) now draw on the mesh pass with layer 2 
 
 Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notown` so the floor crop holds no residents: 0.125 gives std-dev 12.96, 0.25 (pinned) 12.69, 0.5 12.52, 1.0 12.73. The spread is under half a level, so this metric does not separate the scales. Visual choice (floor crops from the four captures): at 0.125 the pebbles are oversized and blurry up close; at 0.25 they read as pebbles at a believable size; at 0.5 and 1.0 the texture collapses into fine grit. The scale stays at 0.25. Step 5's texture work is done with this choice. This replaces the withdrawn result in PR #37.
 
+## Step 8 audit (what exists, by grep)
+
+- Present: `SnapshotServer` over lossy `SimLink`s and lag-compensated hits (`app/net_frontier.mojo`, `shot_hits`, `TargetRing`); the page's netcode session equals native (`host_check`).
+- Present in ludens-core only: a rollback and prediction seam (`gameplay/netcode.mojo`, `RollbackPeer`, ROADMAP 17.16). The playground does not use it for a measured prediction error.
+- Absent from the playground: a measured prediction-error bound (the plan's 150 ms check) and the three-colour draw. Neither appears in `app/`, `page/` or `scripts/`.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
