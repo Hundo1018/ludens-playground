@@ -18,6 +18,7 @@ cp page/index.html page/app.js "$OUT/"
 # step 8, second module: the range server (server.wasm) and the Worker that runs it; net_session.mjs is the page's driver
 bash scripts/build_server.sh
 cp build/server/server.wasm page/net_server.worker.mjs page/net_session.mjs "$OUT/"
+bash scripts/build_crowd.sh && mkdir -p "$OUT/crowd" && cp build/crowd/crowd.wasm "$OUT/crowd/" && cp page/crowd.worker.mjs "$OUT/"  # W11: the crowd in a Worker
 cp build/deps/ludens-engine/shell/web/assets.mjs "$OUT/"  # the engine's loader: sha256 check, size cap, copy into wasm
 # the engine's virtual pad (TypeScript): types stripped with node, as the engine's own build_web.py does
 for ts in vpad vpad_view; do
