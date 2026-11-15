@@ -38,8 +38,8 @@ const fragments0 = await stat(12);
 need(fragments0 === 0, `the wall is not there before the player comes near (${fragments0} fragments)`);
 const events0 = await stat(14);
 need(events0 === 0, `no fracture event before the player comes near (${events0})`);
-// the player walks to 17 m from the wall (it is released within 20 m), and the wall falls and breaks
-await js(`window.host.x.playground_host_frontier_teleport(window.host.app, 100, -100)`);
+// the player walks to 18 m from the wall (it is released within 20 m), and the wall falls and breaks
+await js(`window.host.x.playground_host_frontier_teleport(window.host.app, 100, -110)`);  // 18 m from the wall, inside the 20 m release radius
 let events = 0;
 for (let i = 0; i < 120 && events === 0; i++) { await sleep(250); events = await stat(14); }
 const fragments = await stat(12);

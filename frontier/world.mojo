@@ -64,7 +64,7 @@ comptime STAT_TICK = 9
 comptime STAT_YAW_MRAD = 10  # the camera yaw in milliradians (W1: the mouse and pad look)
 comptime STAT_FREE_FRAGMENTS = 11  # fragments of the quarry wall that have come loose (W7; 0 while the wall stands)
 comptime STAT_FRAGMENTS = 12  # fragments the quarry wall was cut into (W7)
-comptime QUARRY_WALL = Vec3(112.0, 8.0, -112.0, 0.0)  # W7: the quarry's fractured wall, released 6 m up (plan card 2a)
+comptime QUARRY_WALL = Vec3(112.0, 8.0, -124.0, 0.0)  # W7: the quarry's fractured wall, released 6 m up, 12 m past the quarry goal (plan card 2a)
 comptime QUARRY_WALL_HALF = Vec3(4.0, 2.0, 0.3, 0.0)
 comptime QUARRY_RELEASE_R = Real(20.0)  # W7: the wall is released when the player comes this close (metres)
 
