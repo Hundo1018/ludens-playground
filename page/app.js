@@ -66,6 +66,7 @@ function crowdWorkerFrame() {
     try { x.playground_host_crowd_feed(app, BigInt(s.ptr), n); } finally { s.free(); }
     stats.crowdRows = (stats.crowdRows || 0) + 1;
   }).catch((e) => { stats.error = "crowd worker: " + String(e); }).finally(() => { crowdWorker.busy = false; });
+}
 // W8: the four sounds. Each .lsound (scripts/convert_wav.py: "LSND", version, header length, JSON header, int16 mono
 // frames) is decoded to stereo f32 and registered on the host's audio scene. The first is the menu select, the second the
 // coin cluster, which plays when a zone goal is reached (GOAL_SOUND).
