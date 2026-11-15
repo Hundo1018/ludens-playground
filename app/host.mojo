@@ -16,6 +16,7 @@ from app.shadow_pass import ShadowPass
 from app.ao_grid import ao_grid, AO_N, AO_X0, AO_SIZE
 from std.math import sqrt
 from app.net_predict import PredictRun, run_predict_coupled, PREDICT_T, PREDICT_SEED
+from app.net_fracture import FractureNetResult, run_fracture_session
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
@@ -141,6 +142,7 @@ struct Host(Movable):
     var ao_done: Bool  # the AO grid was filled by the GPU trace and set on the mesh pass (once, on the first frame)
     var net_run: Optional[PredictRun]  # step 8: the three-colour netcode run for player 0 (server, predicted, shown)
     var net_on: Bool  # the markers are drawn while on
+    var fracnet: Optional[FractureNetResult]  # C: the last fracture replication run; its server and client 0 walls are drawn
     var net_frame: Int  # the frame counter that steps through the run, one run frame per draw
 
     def __init__(out self, selector: String, width: UInt32, height: UInt32) raises:
@@ -208,6 +210,7 @@ struct Host(Movable):
         self.ao_done = False
         self.net_run = None
         self.net_on = False
+        self.fracnet = None
         self.net_frame = 0
 
     def __init__(out self, *, deinit move: Self):
@@ -275,6 +278,7 @@ struct Host(Movable):
         self.palette_used = move.palette_used
         self.net_run = move.net_run^
         self.net_on = move.net_on
+        self.fracnet = move.fracnet^
         self.net_frame = move.net_frame
 
     def _draw(mut self, target: WGPUTextureHandle, format: UInt32) raises:
@@ -307,6 +311,8 @@ struct Host(Movable):
             self.renderer.value().push(item)
         if self.net_on and self.net_run:
             self._net_markers()
+        if self.fracnet:
+            self._fracnet_walls()
         var cview = View(m.camera(), Real(Float64(self.width) / Float64(self.height)))  # the crowd's visible set (W11 LOD)
         self._characters(m.world.player_pos(), m.world.player_vel(), cview)  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
@@ -347,6 +353,34 @@ struct Host(Movable):
         self.renderer.value().push(DrawItem(1, Vec3(sx, Real(0.3), Real(-6.0), Real(0.0)), 0.0, 0.0, 0.0, 1.0, Vec3(r, r, r, Real(0.0)), Vec3(Real(0.2), Real(0.9), Real(0.3), Real(0.0))))
         self.renderer.value().push(DrawItem(1, Vec3(px, Real(0.3), Real(-5.0), Real(0.0)), 0.0, 0.0, 0.0, 1.0, Vec3(r, r, r, Real(0.0)), Vec3(Real(0.2), Real(0.5), Real(1.0), Real(0.0))))
         self.renderer.value().push(DrawItem(1, Vec3(hx, Real(0.3), Real(-4.0), Real(0.0)), 0.0, 0.0, 0.0, 1.0, Vec3(r, r, r, Real(0.0)), Vec3(Real(1.0), Real(0.35), Real(0.2), Real(0.0))))
+
+    def _fracnet_walls(mut self) raises:
+        """C: the fracture replication run's last state, the server's wall at x = -5.5 and client 0's at x = +5.5, both
+        12 m north of the hub (z - 14). A box per fragment (as the quarry's), and the crate. Same poses, side by side."""
+        for side in range(2):
+            var ints = self.fracnet.value().server_ints.copy() if side == 0 else self.fracnet.value().client_ints.copy()
+            var off = Vec3(Real(-5.5) if side == 0 else Real(5.5), Real(0.0), Real(-14.0), Real(0.0))
+            var col = Vec3(Real(0.55), Real(0.5), Real(0.45), Real(0.0)) if side == 0 else Vec3(Real(0.35), Real(0.5), Real(0.75), Real(0.0))
+            var nfr = (len(ints) - 3) // 8
+            if ints[2] != 0:
+                nfr = (len(ints) - 3 - 7) // 8
+            var k = 3
+            for i in range(nfr + (1 if ints[2] != 0 else 0)):
+                var crate = i == nfr
+                if not crate:
+                    if ints[k] == 0:
+                        k += 8
+                        continue
+                    k += 1
+                var pos = Vec3(Real(Float64(ints[k]) / 1000.0), Real(Float64(ints[k + 1]) / 1000.0), Real(Float64(ints[k + 2]) / 1000.0), Real(0.0)) + off
+                var qx = Float64(ints[k + 3]) / 1e6
+                var qy = Float64(ints[k + 4]) / 1e6
+                var qz = Float64(ints[k + 5]) / 1e6
+                var qw = Float64(ints[k + 6]) / 1e6
+                k += 7
+                var half = Vec3(Real(0.6), Real(0.6), Real(0.6), Real(0.0)) if crate else Vec3(Real(0.3), Real(0.3), Real(0.15), Real(0.0))
+                var c = Vec3(Real(0.3), Real(0.3), Real(0.32), Real(0.0)) if crate else col
+                self.renderer.value().push(DrawItem(0, pos, qx, qy, qz, qw, half, c))
 
     def _register(mut self) raises:
         """Once both characters and the wall are on the page: their meshes and the texture layer go to the renderer.
@@ -886,6 +920,52 @@ def playground_host_netview_stat(app: UInt64, which: Int32) abi("C") -> Int32:
     if which == 5:
         return Int32(1) if h[].net_run.value().world_equal_at_end else Int32(0)
     return -2
+
+
+@export
+def playground_host_fracture_net(app: UInt64, latency: Int32, jitter: Int32, loss_permille: Int32) abi("C") -> Int32:
+    """Reference baseline C: the fractured wall's session (app/net_fracture.mojo) over SimLinks with these settings, run
+    to tick 240. 1 when both clients reach it, their read-back hashes equal the server's and the fragments have settled;
+    0 otherwise; -3 if a setting is out of range; -2 on an error. The run's last state is kept and drawn in the hub."""
+    if latency < 0 or latency > 30 or jitter < 0 or jitter > 10 or loss_permille < 0 or loss_permille > 500:
+        return -3
+    try:
+        var r = run_fracture_session(Int(latency), Int(jitter), Real(Float64(loss_permille) / 1000.0), UInt64(1234), 240)
+        var ok = r.all_at_T and r.hashes_equal and r.settled
+        _host(app)[].fracnet = r^
+        return 1 if ok else 0
+    except e:
+        print("playground_host_fracture_net:", e)
+        return -2
+
+
+@export
+def playground_host_fracture_net_stat(app: UInt64, which: Int32) abi("C") -> Int32:
+    """The last fracture run: 0 events, 1-3 fragments moved over 100 mm on the server, client 0, client 1, 4 server bytes
+    over the break's 60 ticks, 5 over the settled last 30, 6 hashes equal, 7 settled, 8 frames. -1 before a run."""
+    ref h = _host(app)[]
+    if not h.fracnet:
+        return -1
+    ref r = h.fracnet.value()
+    if which == 0:
+        return Int32(r.events)
+    if which == 1:
+        return Int32(r.moved_server)
+    if which == 2:
+        return Int32(r.moved_client0)
+    if which == 3:
+        return Int32(r.moved_client1)
+    if which == 4:
+        return Int32(r.bytes_break)
+    if which == 5:
+        return Int32(r.bytes_settled)
+    if which == 6:
+        return 1 if r.hashes_equal else 0
+    if which == 7:
+        return 1 if r.settled else 0
+    if which == 8:
+        return Int32(r.frames)
+    return -1
 
 
 @export

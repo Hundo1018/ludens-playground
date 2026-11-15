@@ -97,6 +97,12 @@ jobs:
             pixi run --manifest-path engine/pixi.toml -e wasm node scripts/ragdoll_check.mjs \
               "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen&at=118,128" 300 || exit 1
           done
+      - name: "Destruction sync (C): a fractured wall on SnapshotServer, two clients' read-back hashes equal the server's at latency 4 (scripts/fracnet_check.mjs, three runs)"
+        run: |
+          for i in 1 2 3; do
+            pixi run --manifest-path engine/pixi.toml -e wasm node scripts/fracnet_check.mjs \
+              "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen" 300 || exit 1
+          done
       - name: "Sound: four CC0 effects load, a goal starts its sound once, the worklet is fed (scripts/audio_check.mjs, three runs)"
         run: |
           for i in 1 2 3; do

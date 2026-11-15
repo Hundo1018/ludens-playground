@@ -110,3 +110,10 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/net_predict_native.mojo --target native -o build/net_predict_native
 build/net_predict_native
+# Reference baseline C: a fractured wall's destruction served by SnapshotServer to two clients, hashes equal.
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/net_fracture_native.mojo --target native -o build/net_fracture_native
+build/net_fracture_native
