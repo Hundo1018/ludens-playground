@@ -68,6 +68,13 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/shadow_flip_native.mojo --target native -o build/shadow_flip_native
 build/shadow_flip_native
+# Step 5 skinned shadows: the skinned depth path matches the static one at an identity palette (joint and weight layout).
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/shadow_skin_native.mojo --target native -o build/shadow_skin_native
+build/shadow_skin_native
 # Step 8 prediction-error bound (docs/frontier_plan.md line 430): a predicted client against the server truth, natively.
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \

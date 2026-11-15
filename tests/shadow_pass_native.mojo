@@ -67,7 +67,7 @@ def main() raises:
     print('stage: registry ok', flush=True)
     var shadow = ShadowPass(device, WGPUTextureFormat.Depth32Float)
     print('stage: shadow init ok', flush=True)
-    shadow.draw(device, items, registry, vp, depth_view^)
+    shadow.draw(device, items, registry, vp, depth_view^, List[Float32]())
 
     print('stage: shadow draw ok', flush=True)
     # Read pass: two texels, the box's centre and an open corner.
