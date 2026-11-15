@@ -64,6 +64,9 @@ comptime STAT_TICK = 9
 comptime STAT_YAW_MRAD = 10  # the camera yaw in milliradians (W1: the mouse and pad look)
 comptime STAT_FREE_FRAGMENTS = 11  # fragments of the quarry wall that have come loose (W7; 0 while the wall stands)
 comptime STAT_FRAGMENTS = 12  # fragments the quarry wall was cut into (W7)
+comptime STAT_GOALS = 15  # zone goals reached, 0 to 4 (W6)
+comptime GOAL_R: Real = 4.0  # a goal is reached within this distance (metres)
+comptime GOAL_COUNT = 4
 comptime QUARRY_WALL = Vec3(112.0, 8.0, -124.0, 0.0)  # W7: the quarry's fractured wall, released 6 m up, 12 m past the quarry goal (plan card 2a)
 comptime QUARRY_WALL_HALF = Vec3(4.0, 2.0, 0.3, 0.0)
 comptime QUARRY_RELEASE_R = Real(20.0)  # W7: the wall is released when the player comes this close (metres)
@@ -77,6 +80,17 @@ def zone_of(x: Float64, z: Float64) -> Int:
     if z < 0:
         return ZONE_QUARRY if x >= 0 else ZONE_CAMP
     return ZONE_TOWN if x >= 0 else ZONE_TRAINING
+
+
+def goal_point(i: Int) -> Vec3:
+    """W6: the goal of zone i (0 quarry, 1 camp, 2 town, 3 training): the zone's fast-travel point."""
+    if i == 0:
+        return Vec3(112.0, 0.0, -112.0, 0.0)
+    if i == 1:
+        return Vec3(-112.0, 0.0, -112.0, 0.0)
+    if i == 2:
+        return Vec3(112.0, 0.0, 112.0, 0.0)
+    return Vec3(-112.0, 0.0, 112.0, 0.0)
 
 
 def zone_name(zone: Int) -> String:
@@ -150,6 +164,8 @@ struct Frontier(Movable):
     var culled: Int
     var culling: Bool  # False draws every loaded item: what culling saves can be measured
     var debug: Bool  # ?debug: the HUD shows the streaming counters (W9)
+    var goal_done: List[Bool]  # W6: one goal per zone, at its fast-travel point; each counted once
+    var goal_count: Int
     var wall_released: Bool  # W7: the fractured wall exists (it is added when the player comes near)
     var fracture_events: Int  # fracture events (bonds broken or fragments evicted) since the start (W7)
 
@@ -169,6 +185,10 @@ struct Frontier(Movable):
         self.culled = 0
         self.culling = True
         self.debug = False
+        self.goal_done = List[Bool]()
+        for _ in range(GOAL_COUNT):
+            self.goal_done.append(False)
+        self.goal_count = 0
         self.wall_released = False
         self.fracture_events = 0
         self.player = DynamicCharacter.spawn(
@@ -197,6 +217,8 @@ struct Frontier(Movable):
         self.culled = move.culled
         self.culling = move.culling
         self.debug = move.debug
+        self.goal_done = move.goal_done.copy()
+        self.goal_count = move.goal_count
         self.wall_released = move.wall_released
         self.fracture_events = move.fracture_events
 
@@ -350,6 +372,8 @@ struct Frontier(Movable):
             return Int(self.yaw * 1000.0)
         if which == 14:  # fracture events since the start (W7)
             return self.fracture_events
+        if which == STAT_GOALS:
+            return self.goal_count
         if which == STAT_FREE_FRAGMENTS:
             return self.world.fracture.free_count() if self.world.fracture_on else 0
         if which == STAT_FRAGMENTS:
@@ -439,6 +463,19 @@ struct Frontier(Movable):
                 self.unloads += 1
         self.part.events.clear()
 
+    def _check_goals(mut self) raises:
+        """W6: each zone's goal is reached once, when the player comes within GOAL_R of its point."""
+        var p = self.player_pos()
+        for i in range(GOAL_COUNT):
+            if self.goal_done[i]:
+                continue
+            var g = goal_point(i)
+            var dx = p[0] - g[0]
+            var dz = p[2] - g[2]
+            if dx * dx + dz * dz < GOAL_R * GOAL_R:
+                self.goal_done[i] = True
+                self.goal_count += 1
+
     def _camera(mut self) raises:
         self.arm.aim(self.yaw, self.pitch)
         self.cam = self.arm.update(self.world.scene, self.player_pos() + Vec3(0.0, 0.5, 0.0, 0.0), DT)
@@ -484,3 +521,4 @@ struct Frontier(Movable):
                 self.wall_released = True  # the wall falls from 6 m when the player comes near (plan W7)
         self.world.physics_tick()
         self.fracture_events += len(self.world.frame_fracture)
+        self._check_goals()

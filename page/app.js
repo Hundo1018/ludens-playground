@@ -10,6 +10,7 @@ const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("canvas");
 // ?w=&h= sets the canvas size (the step 7 measurement is taken at 1280 x 720; the default stays as in index.html).
 if (params.has("w") && params.has("h")) { canvas.width = Number(params.get("w")); canvas.height = Number(params.get("h")); }
+const atPoint = params.has("at") ? params.get("at").split(",").map(Number) : null; // ?at=x,z (visual checks)
 const stats = (window.host = { frames: 0, error: "", frameMs: 0, app: 0n, rt: null, x: null, assets: 0 });
 
 // The page's converted assets, by file name: the kind playground_host_asset expects (see app/host.mojo).
@@ -201,6 +202,8 @@ async function boot() {
       x.playground_host_set_frame_ms(app, stats.frameMs);
       if (r < 0) throw new Error("playground_host_frame returned " + r);
       if (r === 1) stats.frames++;
+      // ?at=x,z: a visual check (plan stage checks) moves the player to a point once, after ten frames
+      if (atPoint && stats.frames === 10) x.playground_host_frontier_teleport(app, atPoint[0], atPoint[1]);
       requestAnimationFrame(frame);
     } catch (e) { stats.error = String(e); }
   };
