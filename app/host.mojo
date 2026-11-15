@@ -11,6 +11,7 @@ from geometry.vec import Real
 from hud import Hud
 from render3d import ArenaRenderer
 from app.mesh_pass import MeshRegistry, unit_cube_arrays
+from app.net_predict import PredictRun, run_predict, PREDICT_T, PREDICT_SEED
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
@@ -108,6 +109,9 @@ struct Host(Movable):
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
+    var net_run: Optional[PredictRun]  # step 8: the three-colour netcode run for player 0 (server, predicted, shown)
+    var net_on: Bool  # the markers are drawn while on
+    var net_frame: Int  # the frame counter that steps through the run, one run frame per draw
 
     def __init__(out self, selector: String, width: UInt32, height: UInt32) raises:
         self.boot = GPUBoot("playground")
@@ -147,6 +151,9 @@ struct Host(Movable):
         self.town = None
         self.tex_job = None
         self.b3_job = None
+        self.net_run = None
+        self.net_on = False
+        self.net_frame = 0
 
     def __init__(out self, *, deinit move: Self):
         self.boot = move.boot^
@@ -186,6 +193,9 @@ struct Host(Movable):
         self.town = move.town^
         self.tex_job = move.tex_job^
         self.b3_job = move.b3_job^
+        self.net_run = move.net_run^
+        self.net_on = move.net_on
+        self.net_frame = move.net_frame
 
     def _draw(mut self, target: WGPUTextureHandle, format: UInt32) raises:
         var aspect = Float32(self.width) / Float32(self.height)
@@ -211,10 +221,29 @@ struct Host(Movable):
                     item.mesh_id = self.wall_mesh  # walls keep layer 1
                     item.half = item.half * Real(2.0)  # the unit cube has half-extent 0.5; the mesh pass scales it by half
             self.renderer.value().push(item)
+        if self.net_on and self.net_run:
+            self._net_markers()
         self._characters(view, m.world.player_pos())  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         self.renderer.value().draw(self.boot.device(), target, self.width, self.height, self.hud.value())
         self.world = m^
+
+    def _net_markers(mut self) raises:
+        """Step 8 (frontier_plan.md line 206): three markers for player 0 from the netcode run, one run frame per draw.
+        Green is the server's truth, blue the predicted sim, red the client that shows the newest snapshot. Each sits on
+        its own row in the world, so the three can be compared by eye as the frame advances."""
+        var n = len(self.net_run.value().frames)
+        if n == 0:
+            return
+        var fr = self.net_run.value().frames[self.net_frame % n].copy()
+        self.net_frame += 1
+        var sx = Real(Float64(fr.server_mm) / 1000.0)
+        var px = Real(Float64(fr.predicted_mm) / 1000.0)
+        var hx = Real(Float64(fr.shown_mm) / 1000.0)
+        var r = Real(0.25)
+        self.renderer.value().push(DrawItem(1, Vec3(sx, Real(0.3), Real(-6.0), Real(0.0)), 0.0, 0.0, 0.0, 1.0, Vec3(r, r, r, Real(0.0)), Vec3(Real(0.2), Real(0.9), Real(0.3), Real(0.0))))
+        self.renderer.value().push(DrawItem(1, Vec3(px, Real(0.3), Real(-5.0), Real(0.0)), 0.0, 0.0, 0.0, 1.0, Vec3(r, r, r, Real(0.0)), Vec3(Real(0.2), Real(0.5), Real(1.0), Real(0.0))))
+        self.renderer.value().push(DrawItem(1, Vec3(hx, Real(0.3), Real(-4.0), Real(0.0)), 0.0, 0.0, 0.0, 1.0, Vec3(r, r, r, Real(0.0)), Vec3(Real(1.0), Real(0.35), Real(0.2), Real(0.0))))
 
     def _register(mut self) raises:
         """Once both characters and the wall are on the page: their meshes and the texture layer go to the renderer.
@@ -503,6 +532,47 @@ def playground_host_motion_hash(app: UInt64) abi("C") -> Int32:
     except e:
         print("playground_host_motion_hash:", e)
         return -2
+
+
+@export
+def playground_host_netview(app: UInt64, on: Int32, latency: Int32, jitter: Int32, loss_permille: Int32) abi("C") -> Int32:
+    """Step 8: the three-colour netcode view for player 0 (server truth, predicted, shown) on the page's link. on 0 hides
+    the markers; on 1 runs the session for this link and draws the markers from it. Returns 0; -3 if a slider is out of
+    range; -2 if the run failed (printed)."""
+    var h = _host(app)
+    h[].net_on = on != 0
+    if not h[].net_on:
+        return 0
+    if latency < 0 or latency > 30 or jitter < 0 or jitter > 10 or loss_permille < 0 or loss_permille > 500:
+        return -3
+    try:
+        h[].net_run = run_predict(Int(latency), Int(jitter), Real(Float64(loss_permille) / 1000.0), PREDICT_SEED, PREDICT_T)
+        h[].net_frame = 0
+        return 0
+    except e:
+        print("playground_host_netview:", e)
+        return -2
+
+
+@export
+def playground_host_netview_stat(app: UInt64, which: Int32) abi("C") -> Int32:
+    """Step 8: the last netview run, in millimetres. 0 the worst per-tick predicted error, 1 the worst error after the
+    idle window, 2 the worst lag of the shown client behind the predicted sim, 3 the snapshot ticks compared, 4 1 when
+    player 0 equals the truth at T. Returns -1 when no run exists, -2 for an unknown stat."""
+    var h = _host(app)
+    if not h[].net_run:
+        return -1
+    if which == 0:
+        return Int32(h[].net_run.value().worst_predicted_mm)
+    if which == 1:
+        return Int32(h[].net_run.value().worst_idle_mm)
+    if which == 2:
+        return Int32(h[].net_run.value().worst_lag_mm)
+    if which == 3:
+        return Int32(h[].net_run.value().ticks_checked)
+    if which == 4:
+        return Int32(1) if h[].net_run.value().p0_equal_at_end else Int32(0)
+    return -2
 
 
 @export
