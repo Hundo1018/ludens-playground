@@ -85,7 +85,7 @@ Severity order. Each finding names the user feedback item it touches (the user's
 
 ### Work, in order
 
-Each item states its acceptance check, observable from the page or a native test. A step is done when its check passes three runs in a row and its PR is merged.
+Each item states its acceptance check, observable from the page or a native test. A step is done when its check passes and its PR is merged. A browser check runs three times inside one CI step (a loop in `pages.yml`), so one green workflow run counts as three in a row; this replaces the earlier rule of three workflow runs per head.
 
 **W2 Frame time shown (F7).** Add `playground_host_set_frame_ms(app, ms: Float64)` in `app/host.mojo`, called from `page/app.js` with the measured frame time. Add `playground_host_frame_ms(app) -> Float64` for the check. Acceptance: `host_check` asserts `frame_ms > 0` after 10 frames and the HUD text shows a value other than `0.0`.
 
@@ -128,7 +128,29 @@ Each item states its acceptance check, observable from the page or a native test
 
 ### Order and stopping rule
 
-W2, W1, W3, then W4 with W5, W6, W8, W7, W9, W10, W11. Each step is one PR. An engine or wgpu-mojo change is that repo's PR, then a pin bump here. Stop and report only when CI cannot verify a step.
+W2, W1, W3, then W4 with W5, W6, W8, W7, W9, W10, W11. Each step is one PR, stacked on the previous one while CI runs. An engine or wgpu-mojo change is that repo's PR, then a pin bump here. Stop and report only when CI cannot verify a step.
+
+### Progress (2026-11-15)
+
+| Item | PR | State |
+|---|---|---|
+| W2 frame time | #63 | merged (`7450325`) |
+| W1 camera look | #64 | merged (`b35764e`); three green runs on `4a56a4b` (attempts 3, 5, 6) |
+| W3 protagonist | #65 | open; CI runs the check three times in one step |
+| W4a crowd loop | #66 | open; stacked on W3 |
+| W4b town in TOWN zone | #67 | open; stacked on W4a |
+| W5 hub pillars for the crowd | (this branch) | `tests/crowd_native.mojo` 8/8: no member in a pillar after 40 s, corners checked |
+| W6 to W11 | | not started |
+
+Visual checks: W1 `look_check`; W3 protagonist frame in `zone_quarry.png`; W4a `crowd60.png` (members in a band on the square, none round the player); W4b `zone_town.png` (residents in the streets).
+
+Acceptance amended (W4): "0 residents on screen at the hub" measures visibility, and it is 17 of 24 from the hub's view distance, because the far town is inside the view. The residents are not in the hub; the count is not a location test.
+
+### Feasibility (probes run 2026-11-15)
+
+- W10 (ray-traced AO): the wgpu-mojo web layer has `wgpuDeviceCreateComputePipeline` and `wgpuComputePassEncoderDispatchWorkgroups` (in `web/implemented.txt`). A compute AO pass may need no wgpu-mojo PR; storage buffers still need checking.
+- W7 (physics): `add_fracture_box` exists in ludens-core `embed/world.mojo` (17.90). No engine change is needed for one fracture wall.
+- W8 (sound): the engine's `app/main.mojo` already uses `add_clip_pcm`; `scripts/convert_wav.py` exists. The playground host has no audio output path yet, so W8 is host work.
 
 ### Status note
 

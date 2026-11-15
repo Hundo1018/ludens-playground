@@ -5,6 +5,7 @@ from std.math import sqrt
 from harness.runner import Suite
 from geometry.vec import Real
 from app.crowd import CrowdState, CrowdRow
+from frontier.world import Frontier, StaticBox
 
 
 def mean_distance(rows: List[CrowdRow]) -> Real:
@@ -39,7 +40,9 @@ def main() raises:
     var s = Suite("crowd_native")
     var dt = Real(1.0 / 60.0)
 
-    var sparse = CrowdState(64)
+    var f = Frontier()
+    var pillars = f.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0)
+    var sparse = CrowdState(64, pillars)
     for _ in range(2400):
         sparse.step(dt)
     var d1 = mean_distance(sparse.positions())
@@ -50,17 +53,23 @@ def main() raises:
         if abs(r.x) > Real(20.0) or abs(r.z) > Real(20.0):
             inside = False
     s.check(inside, "every member stays on the floor (inside 20 m on each axis)")
+    var in_pillar = 0
+    for r in sparse.positions():
+        for b in pillars:
+            if abs(r.x - b.c[0]) < b.h[0] + Real(0.3) and abs(r.z - b.c[2]) < b.h[2] + Real(0.3):
+                in_pillar += 1
+    s.check(in_pillar == 0, "no member stands inside a hub pillar after 40 s (" + String(in_pillar) + " inside)")
     s.check(len(sparse.positions()) == 64, "all 64 members are entities after the walk")
 
     # Parity: the naive backend, from the same start, ends in the same state.
-    var naive = CrowdState(64)
+    var naive = CrowdState(64, pillars)
     naive.switch()
     for _ in range(2400):
         naive.step(dt)
     s.check(same(by_offset(sparse.positions()), by_offset(naive.positions())), "sparse-set and naive backends agree exactly after 2400 ticks")
 
     # A switch mid-run: 150 ticks on one backend, switch, 150 more; the same as 300 ticks on one backend.
-    var mixed = CrowdState(64)
+    var mixed = CrowdState(64, pillars)
     for _ in range(1200):
         mixed.step(dt)
     mixed.switch()

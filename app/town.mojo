@@ -8,6 +8,7 @@ The four corners (112,112), (144,112), (144,144), (112,144) lie in the street ga
 tests/town_native.mojo). Residents loop the corners, starting at spread points on the streets. The guard patrols the
 same loop until the player stands inside the town square; then it closes on the player.
 """
+from app.nav_boxes import tri, nav_box
 from frontier.world import StaticBox
 from geometry.vec import Real, Vec3
 from nav.heightfield import NavBakeConfig
@@ -32,49 +33,16 @@ def corner(i: Int) -> Vec3:
     return Vec3(x, 0.0, z, 0.0)
 
 
-def _tri(mut verts: List[Vec3], mut tris: List[Int], a: Vec3, b: Vec3, c: Vec3):
-    var n = len(verts)
-    verts.append(a)
-    verts.append(b)
-    verts.append(c)
-    tris.append(n)
-    tris.append(n + 1)
-    tris.append(n + 2)
-
-
-def _nav_box(mut verts: List[Vec3], mut tris: List[Int], c: Vec3, h: Vec3):
-    """A box as outward-facing triangles: its side faces are steep, so the navmesh treats it as an obstacle.
-    The same construction as game/arena.mojo's _nav_box."""
-    var x0 = c[0] - h[0]
-    var x1 = c[0] + h[0]
-    var y0 = c[1] - h[1]
-    var y1 = c[1] + h[1]
-    var z0 = c[2] - h[2]
-    var z1 = c[2] + h[2]
-    _tri(verts, tris, Vec3(x0, y0, z0, 0.0), Vec3(x0, y1, z0, 0.0), Vec3(x0, y0, z1, 0.0))
-    _tri(verts, tris, Vec3(x0, y0, z1, 0.0), Vec3(x0, y1, z0, 0.0), Vec3(x0, y1, z1, 0.0))
-    _tri(verts, tris, Vec3(x1, y0, z0, 0.0), Vec3(x1, y0, z1, 0.0), Vec3(x1, y1, z0, 0.0))
-    _tri(verts, tris, Vec3(x1, y0, z1, 0.0), Vec3(x1, y1, z1, 0.0), Vec3(x1, y1, z0, 0.0))
-    _tri(verts, tris, Vec3(x0, y0, z0, 0.0), Vec3(x1, y0, z0, 0.0), Vec3(x0, y1, z0, 0.0))
-    _tri(verts, tris, Vec3(x1, y0, z0, 0.0), Vec3(x1, y1, z0, 0.0), Vec3(x0, y1, z0, 0.0))
-    _tri(verts, tris, Vec3(x0, y0, z1, 0.0), Vec3(x0, y1, z1, 0.0), Vec3(x1, y0, z1, 0.0))
-    _tri(verts, tris, Vec3(x1, y0, z1, 0.0), Vec3(x0, y1, z1, 0.0), Vec3(x1, y1, z1, 0.0))
-    _tri(verts, tris, Vec3(x0, y1, z0, 0.0), Vec3(x0, y1, z1, 0.0), Vec3(x1, y1, z0, 0.0))
-    _tri(verts, tris, Vec3(x1, y1, z0, 0.0), Vec3(x0, y1, z1, 0.0), Vec3(x1, y1, z1, 0.0))
-    _tri(verts, tris, Vec3(x0, y0, z0, 0.0), Vec3(x1, y0, z0, 0.0), Vec3(x0, y0, z1, 0.0))
-    _tri(verts, tris, Vec3(x1, y0, z0, 0.0), Vec3(x1, y0, z1, 0.0), Vec3(x0, y0, z1, 0.0))
-
-
 def town_mesh(boxes: List[StaticBox]) raises -> NavMesh:
     """The town square's floor with each box as an obstacle, baked with the card 3 settings."""
     var verts = List[Vec3]()
     var tris = List[Int]()
     var a = CENTRE - HALF
     var b = CENTRE + HALF
-    _tri(verts, tris, Vec3(a, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, a, 0.0))
-    _tri(verts, tris, Vec3(b, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, b, 0.0))
+    tri(verts, tris, Vec3(a, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, a, 0.0))
+    tri(verts, tris, Vec3(b, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, b, 0.0))
     for bx in boxes:
-        _nav_box(verts, tris, bx.c, bx.h)
+        nav_box(verts, tris, bx.c, bx.h)
     return bake_navmesh(verts, tris, NavBakeConfig(0.25, 0.1, 1.8, 0.3, 0.4, 45.0, 32))
 
 

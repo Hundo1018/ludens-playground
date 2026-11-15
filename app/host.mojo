@@ -815,7 +815,7 @@ def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
         if need > PALETTE_MATRICES:
             return -4
     try:
-        h[].crowd = CrowdState(Int(n))
+        h[].crowd = CrowdState(Int(n), h[].world.value().world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0))
         return n
     except e:
         print("playground_host_crowd:", e)
