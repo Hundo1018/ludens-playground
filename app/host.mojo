@@ -271,8 +271,7 @@ struct Host(Movable):
         self._characters(m.world.player_pos(), m.world.player_vel(), cview)  # read while the world is held here, not inside _characters
         if self.reset_player:  # W6: a guard contact sends the player back to the hub (the next frame shows it there)
             self.reset_player = False
-            if self.world:
-                self.world.value().world.teleport(0.0, 0.0)
+            m.world.teleport(0.0, 0.0)  # m holds the world here: self.world is None until it is restored below
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
         var light = _light_vp()
@@ -1267,6 +1266,9 @@ def playground_host_crowd_feed(app: UInt64, ptr: UInt64, n: Int32) abi("C") -> I
                              Int(src.unsafe_offset(4 * i + 2)[]), Int(src.unsafe_offset(4 * i + 3)[])))
     h[].ext_rows = rows^
     return 0
+
+
+@export
 def playground_host_contacts(app: UInt64) abi("C") -> Int32:
     """W6: how many times the town's guard has touched the player since the town was switched on."""
     return Int32(_host(app)[].contacts)
