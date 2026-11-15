@@ -15,12 +15,15 @@ from geometry.vec import Real, Vec3
 from nav.heightfield import NavBakeConfig
 from nav.navmesh import NavMesh, bake_navmesh
 from nav.path import FlowField
+from app.nav_boxes import tri, nav_box
+from frontier.world import StaticBox
 
 comptime SPEED = Real(1.4)  # metres per second
 comptime STOP = Real(0.6)  # metres from the goal
 comptime FLOOR = Real(20.0)  # the floor is -20 .. 20 m on each axis
 comptime ROUTE_R = Real(12.0)  # the four route corners sit this far from the centre on each axis
 comptime ROUTES = 4
+comptime CLEAR = Real(0.3)  # a route corner keeps this far from a pillar's footprint
 
 
 def route_corner(i: Int) -> Vec3:
@@ -61,22 +64,14 @@ struct CrowdRow(Copyable, ImplicitlyCopyable, Movable):
     var goal: Int
 
 
-def _tri(mut verts: List[Vec3], mut tris: List[Int], a: Vec3, b: Vec3, c: Vec3):
-    var i = len(verts)
-    verts.append(a)
-    verts.append(b)
-    verts.append(c)
-    tris.append(i)
-    tris.append(i + 1)
-    tris.append(i + 2)
-
-
-def floor_mesh() raises -> NavMesh:
-    """The arena's floor, baked with the arena's settings (game/arena.mojo, _make_mesh)."""
+def floor_mesh(boxes: List[StaticBox]) raises -> NavMesh:
+    """The 40 m floor with each box as an obstacle (the hub's pillars: plan W5), baked with the arena's settings."""
     var verts = List[Vec3]()
     var tris = List[Int]()
-    _tri(verts, tris, Vec3(-20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, -20.0, 0.0))
-    _tri(verts, tris, Vec3(20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, 20.0, 0.0))
+    tri(verts, tris, Vec3(-20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, -20.0, 0.0))
+    tri(verts, tris, Vec3(20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, 20.0, 0.0))
+    for bx in boxes:
+        nav_box(verts, tris, bx.c, bx.h)
     return bake_navmesh(verts, tris, NavBakeConfig(0.25, 0.1, 1.8, 0.3, 0.4, 45.0, 16))
 
 
@@ -157,12 +152,17 @@ struct CrowdState(Movable):
     var n: Int
     var arrivals: Int  # corner arrivals over the whole run, both backends
 
-    def __init__(out self, n: Int) raises:
+    def __init__(out self, n: Int, boxes: List[StaticBox]) raises:
         self.sparse = SparseWorld()
         self.naive = NaiveWorld()
         populate(self.sparse, n)
         populate(self.naive, n)
-        self.mesh = floor_mesh()
+        self.mesh = floor_mesh(boxes)
+        for i in range(ROUTES):
+            var k = route_corner(i)
+            for b in boxes:
+                if abs(k[0] - b.c[0]) < b.h[0] + CLEAR and abs(k[2] - b.c[2]) < b.h[2] + CLEAR:
+                    raise Error("crowd: route corner " + String(i) + " is inside a pillar; move the corner along its street")
         self.fields = _route_fields(self.mesh)
         self.use_naive = False
         self.n = n
