@@ -183,3 +183,29 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 - Backlog: in bench mode (`bench=1`, every frame drawn) the GPU work queues faster than SwiftShader drains it, so the GPU_SYNC numbers track the submit interval rather than GPU time.
 - Conclusion: no count holds 60 Hz on this software rasterizer. The crowd count comes from the native 3b-0 budget. A hardware-GPU browser budget needs a machine with a GPU.
 
+## Step 5 final: skinned characters cast and receive shadows (pinned engine 627e63e)
+
+- Engine #67 (static mesh shadow map) and #68 (skinned receiving: `SkinnedPass` samples the same map and light, the same 3 by 3 PCF) are merged. The playground pins `627e63e`.
+- Casting: the playground's `ShadowPass` runs the engine's skinning arithmetic (`SKIN_FN`) in its depth pass (#53). `tests/shadow_skin_native.mojo` agrees with the static path at 8 texels (worst difference 0).
+- Receiving, measured on the page (60 crowd members, `?offscreen&notown&crowd=60`, shadow on against off, on the members' bodies, excluding the box): mean darkening 11.1 levels with receiving, against 2.0 without it. Without receiving the crowd only casts, and the bodies stay lit.
+- Cast shadow beside the figure's legs: mean 53.9 to 33.6 with casting; torso unchanged (120.9 both).
+- Still not measured: a light-direction flip on skinned meshes (the static map orientation is checked; `shadow_flip_native` 4 of 4).
+
+## Step 7 re-run with casting and receiving (pinned engine 627e63e)
+
+Same method as the main-build table: NO_BENCH SYNC, SwiftShader, 1280×720, captured frame including readback, 12 samples.
+
+| extra instances | residents | median ms | p90 ms | before casting (main build) |
+|---:|---|---:|---:|---:|
+| 0 | on | 322.60 | 376.40 | 208.50 |
+| 100 | on | 819.80 | 888.80 | 493.90 |
+| 180 | on | 1178.60 | 1273.60 | 675.30 |
+| 200 | off | 1107.90 | 1268.60 | 652.70 |
+
+Each captured frame now draws every character's shadow, and the crowd receives shadows. The cost is about 115 ms at 0 extra and about 500 ms at 180 on this software rasterizer. The palette limit is unchanged: 200 with residents is still refused (`-4`), and 400 is still out of capacity.
+
+## Step 8: the coupled hard case, verdict
+
+- `CoupledSim` (#52) refuses a player 0 move that would bring it within 1 m of another player. Measured natively and on the page: 2 refused moves, worst per-tick predicted error 4200 mm, idle error 0 mm, world hash equal at T.
+- The 750 mm bound from `docs/frontier_plan.md` line 430 is **NOT MET** under coupling (4200 mm). The number stands. The predicted client does not see the other players' inputs, so it misses the bound once their moves affect its own. Meeting the bound would take a design change (the others' inputs or positions reaching the client in time), not a retune.
+
