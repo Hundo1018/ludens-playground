@@ -26,6 +26,8 @@ from geometry.quat import Quat
 from geometry.trig import sin, cos
 from geometry.vec import Real, Vec3
 from physics.rigid6 import QuatBody6, Inertia3
+from physics.solver6 import ContactScene6
+from physics.cloth import MeshCloth, grid_mesh
 from procedural.camera_math import CameraPose, Frustum
 from std.math import sqrt
 
@@ -50,6 +52,7 @@ comptime PLAYER_SPEED: Real = 9.0
 comptime JUMP_IMPULSE: Real = 390.0
 comptime CAT_WORLD: UInt32 = 1
 comptime ALL_LAYERS: UInt32 = 0xFFFFFFFF
+comptime CAT_ROPE: UInt32 = 2  # B2: rope segments do not collide with each other
 
 comptime STAT_CELLS_LOADED = 0
 comptime STAT_CELLS_TOTAL = 1
@@ -75,6 +78,23 @@ comptime PENDULUM_PIVOT = Vec3(112.0, 12.0, -124.0, 0.0)  # reference baseline B
 comptime PENDULUM_LEN = Real(9.0)  # the bob hangs 9 m below the pivot, level with the wall's middle at the bottom of its swing
 comptime PENDULUM_MASS = Real(2000.0)  # a wrecking ball: tests/pendulum_native.mojo measures 500 kg not breaking the wall, 2000 kg breaking it
 comptime PENDULUM_BOB_R = Real(1.0)
+comptime CAMP_CENTER = Vec3(-110.0, 0.0, -112.0, 0.0)  # B2, B3: the camp's rope and banner are built when the player comes near
+comptime CAMP_BUILD_R = Real(25.0)
+comptime ROPE_TOP = Vec3(-104.0, 8.0, -112.0, 0.0)  # B2: the rope hangs from a beam here
+comptime ROPE_SEGS = 12  # capsule segments, joined end to end by ball joints
+comptime ROPE_R = Real(0.06)
+comptime ROPE_HALF = Real(0.2)  # half the cylinder part of a segment
+comptime ROPE_END = Real(0.26)  # centre to joint: ROPE_HALF + ROPE_R
+comptime ROPE_WEIGHT_R = Real(0.25)  # a 5 kg ball at the end, pushed sideways so the rope swings
+comptime FLAG_POLE = Vec3(-114.0, 3.2, -112.0, 0.0)  # B3: the banner's pinned edge starts here and runs 1.2 m along z
+comptime FLAG_NX = 12
+comptime FLAG_NZ = 8
+comptime FLAG_W = Real(1.8)
+comptime FLAG_H = Real(1.2)
+comptime STAT_ROPE_LEN_PERMILLE = 17  # B2: the rope's length (segment centres) over its rest length, in permille; -1 before the camp
+comptime STAT_ROPE_SWING_MM = 18  # B2: the end ball's horizontal distance from below the beam, mm; -1 before the camp
+comptime STAT_FLAG_CORNER_MM = 19  # B3: the banner's free corner's distance from its rest position, mm; -1 before the camp
+comptime STAT_FLAG_PIN_UM = 20  # B3: the largest move of a pinned vertex, micrometres; -1 before the camp
 
 comptime FNV_PRIME = UInt64(0x100000001B3)
 
@@ -151,6 +171,39 @@ struct StaticBox(Copyable, ImplicitlyCopyable, Movable):
     var h: Vec3
 
 
+def _cell_item(p00: Vec3, p10: Vec3, p01: Vec3, p11: Vec3, color: Vec3) -> DrawItem:
+    """A cloth cell drawn as a thin box: local x along the cell's u edge, local y along its normal, local z the third axis."""
+    var centre = (p00 + p10 + p01 + p11) * Real(0.25)
+    var u = (p10 + p11 - p00 - p01) * Real(0.5)
+    var v = (p01 + p11 - p00 - p10) * Real(0.5)
+    var lu = sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2])
+    var lv = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+    var x = u / max(lu, Real(1e-6))
+    var n = Vec3(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0], 0.0)
+    var ln = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2])
+    var y = n / max(ln, Real(1e-6))
+    var z = Vec3(x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0], 0.0)
+    # quaternion from the rotation whose columns are x, y, z
+    var m00 = Float64(x[0]); var m01 = Float64(y[0]); var m02 = Float64(z[0])
+    var m10 = Float64(x[1]); var m11 = Float64(y[1]); var m12 = Float64(z[1])
+    var m20 = Float64(x[2]); var m21 = Float64(y[2]); var m22 = Float64(z[2])
+    var tr = m00 + m11 + m22
+    var qw: Float64; var qx: Float64; var qy: Float64; var qz: Float64
+    if tr > 0:
+        var s = (tr + 1.0) ** 0.5 * 2.0
+        qw = 0.25 * s; qx = (m21 - m12) / s; qy = (m02 - m20) / s; qz = (m10 - m01) / s
+    elif m00 > m11 and m00 > m22:
+        var s = (1.0 + m00 - m11 - m22) ** 0.5 * 2.0
+        qw = (m21 - m12) / s; qx = 0.25 * s; qy = (m01 + m10) / s; qz = (m02 + m20) / s
+    elif m11 > m22:
+        var s = (1.0 + m11 - m00 - m22) ** 0.5 * 2.0
+        qw = (m02 - m20) / s; qx = (m01 + m10) / s; qy = 0.25 * s; qz = (m12 + m21) / s
+    else:
+        var s = (1.0 + m22 - m00 - m11) ** 0.5 * 2.0
+        qw = (m10 - m01) / s; qx = (m02 + m20) / s; qy = (m12 + m21) / s; qz = 0.25 * s
+    return DrawItem(0, centre, qx, qy, qz, qw, Vec3(lu * Real(0.5), Real(0.01), lv * Real(0.5), 0.0), color)
+
+
 struct Frontier(Movable):
     var world: EmbedWorld
     var part: WorldPartition
@@ -175,6 +228,12 @@ struct Frontier(Movable):
     var wall_released: Bool  # W7: the fractured wall exists (it is added when the player comes near)
     var pendulum_anchor: Int64  # B1: the hinge's static anchor, -1 until the wall is added
     var pendulum_bob: Int64  # B1: the 2000 kg bob on the hinge, -1 until the wall is added
+    var camp_built: Bool  # B2, B3: the rope and the banner exist
+    var rope: List[Int64]  # B2: the rope's segments, then its end ball
+    var rope_beam: Int64
+    var flag: Optional[MeshCloth]  # B3: the banner, a cloth stepped in its own contact scene
+    var flag_scene: ContactScene6[QuatBody6]
+    var flag_rest: List[Vec3]
     var fracture_events: Int  # fracture events (bonds broken or fragments evicted) since the start (W7)
 
     def __init__(out self) raises:
@@ -202,6 +261,12 @@ struct Frontier(Movable):
         self.fracture_events = 0
         self.pendulum_anchor = -1
         self.pendulum_bob = -1
+        self.camp_built = False
+        self.rope = List[Int64]()
+        self.rope_beam = -1
+        self.flag = None
+        self.flag_scene = ContactScene6[QuatBody6]()
+        self.flag_rest = List[Vec3]()
         self.player = DynamicCharacter.spawn(
             self.world.scene,
             QuatBody6.at_rest(Vec3(0.0, 1.0, 0.0, 0.0), Inertia3.box(80.0, 0.3, 0.9, 0.3)),
@@ -235,6 +300,12 @@ struct Frontier(Movable):
         self.fracture_events = move.fracture_events
         self.pendulum_anchor = move.pendulum_anchor
         self.pendulum_bob = move.pendulum_bob
+        self.camp_built = move.camp_built
+        self.rope = move.rope^
+        self.rope_beam = move.rope_beam
+        self.flag = move.flag^
+        self.flag_scene = move.flag_scene^
+        self.flag_rest = move.flag_rest^
 
     # ------------------------------------------------------------------------------------------------- building
 
@@ -388,6 +459,34 @@ struct Frontier(Movable):
             return self.fracture_events
         if which == STAT_BOB_Z_MM:
             return Int(self.world.state(self.pendulum_bob).pos[2] * Real(1000.0)) if self.pendulum_bob >= 0 else -1
+        if which == STAT_ROPE_LEN_PERMILLE:
+            if len(self.rope) < ROPE_SEGS:
+                return -1
+            var total = Real(0.0)
+            for k in range(ROPE_SEGS - 1):
+                var d = self.world.state(self.rope[k + 1]).pos - self.world.state(self.rope[k]).pos
+                total += sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
+            return Int(total / (ROPE_END * Real(2 * (ROPE_SEGS - 1))) * Real(1000.0))
+        if which == STAT_ROPE_SWING_MM:
+            if len(self.rope) == 0:
+                return -1
+            var e = self.world.state(self.rope[len(self.rope) - 1]).pos
+            var dx = e[0] - ROPE_TOP[0]
+            var dz = e[2] - ROPE_TOP[2]
+            return Int(sqrt(dx * dx + dz * dz) * Real(1000.0))
+        if which == STAT_FLAG_CORNER_MM or which == STAT_FLAG_PIN_UM:
+            if not self.flag:
+                return -1
+            var xs = self.flag.value().x.copy()
+            if which == STAT_FLAG_CORNER_MM:
+                var d = xs[FLAG_NX] - self.flag_rest[FLAG_NX]
+                return Int(sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) * Real(1000.0))
+            var worst = Real(0.0)
+            for j in range(FLAG_NZ + 1):
+                var i = j * (FLAG_NX + 1)
+                var d = xs[i] - self.flag_rest[i]
+                worst = max(worst, sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]))
+            return Int(worst * Real(1000000.0))
         if which == STAT_GOALS:
             return self.goal_count
         if which == STAT_FREE_FRAGMENTS:
@@ -469,6 +568,27 @@ struct Frontier(Movable):
             var mid = (bs.pos + PENDULUM_PIVOT) * Real(0.5)
             out.append(DrawItem(0, mid, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
                                 Vec3(0.1, 0.1, PENDULUM_LEN * Real(0.5), 0.0), Vec3(0.4, 0.35, 0.3, 0.0)))
+        # B2: the rope's beam, its segments (boxes along each capsule's axis) and its end ball
+        if self.camp_built:
+            out.append(DrawItem(0, ROPE_TOP, 0.0, 0.0, 0.0, 1.0, Vec3(0.6, 0.1, 0.1, 0.0), Vec3(0.45, 0.35, 0.25, 0.0)))
+            for k in range(len(self.rope)):
+                var rs = self.world.state(self.rope[k])
+                if k < ROPE_SEGS:
+                    out.append(DrawItem(0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
+                                        Vec3(ROPE_R, ROPE_END, ROPE_R, 0.0), Vec3(0.7, 0.6, 0.4, 0.0)))
+                else:
+                    out.append(DrawItem(1, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
+                                        Vec3(ROPE_WEIGHT_R, ROPE_WEIGHT_R, ROPE_WEIGHT_R, 0.0), Vec3(0.3, 0.3, 0.32, 0.0)))
+        # B3: the banner's pole and its cells, each a thin box in the cell's own frame
+        if self.flag:
+            out.append(DrawItem(0, FLAG_POLE + Vec3(0.0, 0.0, FLAG_H * Real(0.5), 0.0), 0.0, 0.0, 0.0, 1.0,
+                                Vec3(0.05, 0.05, FLAG_H * Real(0.5) + Real(0.1), 0.0), Vec3(0.35, 0.3, 0.25, 0.0)))
+            var xs = self.flag.value().x.copy()
+            for j in range(FLAG_NZ):
+                for i in range(FLAG_NX):
+                    var a = j * (FLAG_NX + 1) + i
+                    var c = a + FLAG_NX + 1
+                    out.append(_cell_item(xs[a], xs[a + 1], xs[c], xs[c + 1], Vec3(0.75, 0.15, 0.12, 0.0)))
         # the player is drawn by the host as a skinned character (plan W3), not here
         self.drawn = len(out)
         self.culled = culled
@@ -524,6 +644,35 @@ struct Frontier(Movable):
             first = False
         self._camera()
 
+    def _build_camp(mut self) raises:
+        """B2: a rope of ROPE_SEGS capsules hanging from a beam, joined end to end by ball joints, with a 5 kg ball at the
+        end pushed sideways so it swings. B3: a banner of FLAG_NX x FLAG_NZ cells, its edge on the pole pinned, in a wind."""
+        self.camp_built = True
+        self.rope_beam = self.world.add_box(ROPE_TOP, Vec3(0.6, 0.1, 0.1, 0.0), 0.0, True)
+        var prev = self.rope_beam
+        var prev_anchor = Vec3(0.0, 0.0, 0.0, 0.0)
+        for k in range(ROPE_SEGS):
+            var c = ROPE_TOP - Vec3(0.0, ROPE_END * Real(2 * k + 1), 0.0, 0.0)
+            var h = self.world.add_capsule(c, ROPE_R, ROPE_HALF, 0.4, False)
+            self.world.set_layer(h, CAT_ROPE, ALL_LAYERS ^ CAT_ROPE)
+            _ = self.world.add_ball_joint(prev, h, prev_anchor, Vec3(0.0, ROPE_END, 0.0, 0.0))
+            self.rope.append(h)
+            prev = h
+            prev_anchor = Vec3(0.0, -ROPE_END, 0.0, 0.0)
+        var wc = ROPE_TOP - Vec3(0.0, ROPE_END * Real(2 * ROPE_SEGS) + ROPE_WEIGHT_R, 0.0, 0.0)
+        var wgt = self.world.add_sphere(wc, ROPE_WEIGHT_R, 5.0, False)
+        self.world.set_layer(wgt, CAT_ROPE, ALL_LAYERS ^ CAT_ROPE)
+        _ = self.world.add_ball_joint(prev, wgt, prev_anchor, Vec3(0.0, ROPE_WEIGHT_R, 0.0, 0.0))
+        self.rope.append(wgt)
+        self.world.set_velocity(wgt, Vec3(4.0, 0.0, 0.0, 0.0), Vec3(0.0, 0.0, 0.0, 0.0))
+        var m = grid_mesh(FLAG_NX, FLAG_NZ, FLAG_W, FLAG_H, FLAG_POLE)
+        var fl = MeshCloth(m[0], m[1], 0.1, 0, 1e-3)
+        fl.wind = Vec3(3.0, 0.0, 1.0, 0.0)
+        for j in range(FLAG_NZ + 1):
+            fl.pin(j * (FLAG_NX + 1))
+        self.flag_rest = fl.x.copy()
+        self.flag = fl^
+
     def _tick(mut self, intent: Intent, jump: Bool) raises:
         self.tick += 1
         var f = Vec3(-sin(self.yaw), 0.0, -cos(self.yaw), 0.0)
@@ -552,6 +701,16 @@ struct Frontier(Movable):
                 _ = self.world.add_hinge_joint(self.pendulum_anchor, self.pendulum_bob, Vec3(0.0, 0.0, 0.0, 0.0),
                                                Vec3(0.0, 0.0, -PENDULUM_LEN, 0.0), Vec3(1.0, 0.0, 0.0, 0.0))
                 self.wall_released = True
+        if not self.camp_built:
+            var pc = self.player_pos()
+            var cx = pc[0] - CAMP_CENTER[0]
+            var cz = pc[2] - CAMP_CENTER[2]
+            if cx * cx + cz * cz < CAMP_BUILD_R * CAMP_BUILD_R:
+                self._build_camp()
+        if self.flag:
+            var fl = self.flag.take()
+            fl.step(self.flag_scene, DT, G)
+            self.flag = fl^
         self.world.physics_tick()
         self.fracture_events += len(self.world.frame_fracture)
         self._check_goals()
