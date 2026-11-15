@@ -118,6 +118,7 @@ struct Host(Movable):
     var b3_job: Optional[B3Job]
     var palette_dropped: Int  # skinned members that did not fit PALETTE_MATRICES, counted since the page started
     var crowd_culled: Int  # W11: crowd members outside the view, not skinned, counted since the page started
+    var crowd_lod: Bool  # W11: the far-member LOD is on (default); playground_host_crowd_lod(app, 0) turns it off for the palette-drop check
     var palette_used: Int  # matrices in the last frame's skinned palette
     var shadow: Optional[ShadowPass]  # the sun's depth pass into the mesh pass's shadow map; made on the first shadowed frame
     var shadow_on: Bool  # ?noshadow turns the shadow factor and its pass off; on by default
@@ -170,6 +171,7 @@ struct Host(Movable):
         self.b3_job = None
         self.palette_dropped = 0
         self.crowd_culled = 0
+        self.crowd_lod = True
         self.palette_used = 0
         self.shadow = None
         self.shadow_on = True
@@ -226,6 +228,7 @@ struct Host(Movable):
         self.b3_job = move.b3_job^
         self.palette_dropped = move.palette_dropped
         self.crowd_culled = move.crowd_culled
+        self.crowd_lod = move.crowd_lod
         self.palette_used = move.palette_used
         self.net_run = move.net_run^
         self.net_on = move.net_on
@@ -364,8 +367,11 @@ struct Host(Movable):
             # W11 far-member LOD: a member outside the view (with a 20 % margin, so none pops at the edge) gets no palette
             # and no draw; its row is still stepped (by the worker or the page). Counted in crowd_culled.
             for k in range(len(crowd_rows)):
-                var cp = view.project(Vec3(Real(crowd_rows[k].x), Real(0.9), Real(crowd_rows[k].z), Real(0.0)))
-                if not (cp.w > view.near and abs(cp.x) <= cp.w * Real(1.2) and abs(cp.y) <= cp.w * Real(1.2)):
+                var inside = True
+                if self.crowd_lod:
+                    var cp = view.project(Vec3(Real(crowd_rows[k].x), Real(0.9), Real(crowd_rows[k].z), Real(0.0)))
+                    inside = cp.w > view.near and abs(cp.x) <= cp.w * Real(1.2) and abs(cp.y) <= cp.w * Real(1.2)
+                if not inside:
                     self.crowd_culled += 1
                     continue
                 if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
@@ -953,6 +959,14 @@ def playground_host_town_on_screen(app: UInt64) abi("C") -> Int32:
             n += 1
     h[].town = tn^
     return n
+
+
+@export
+def playground_host_crowd_lod(app: UInt64, on: Int32) abi("C") -> Int32:
+    """W11 LOD: on=1 (default) skins only the members in the view; on=0 skins every member that fits the palette, so the
+    palette-drop path can be checked from any camera. Returns the setting."""
+    _host(app)[].crowd_lod = on != 0
+    return on
 
 
 @export
