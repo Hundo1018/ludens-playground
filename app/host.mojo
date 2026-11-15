@@ -111,6 +111,8 @@ struct Host(Movable):
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
+    var palette_dropped: Int  # skinned members that did not fit PALETTE_MATRICES, counted since the page started
+    var palette_used: Int  # matrices in the last frame's skinned palette
     var shadow: Optional[ShadowPass]  # the sun's depth pass into the mesh pass's shadow map; made on the first shadowed frame
     var shadow_on: Bool  # ?noshadow turns the shadow factor and its pass off; on by default
     var net_run: Optional[PredictRun]  # step 8: the three-colour netcode run for player 0 (server, predicted, shown)
@@ -155,6 +157,8 @@ struct Host(Movable):
         self.town = None
         self.tex_job = None
         self.b3_job = None
+        self.palette_dropped = 0
+        self.palette_used = 0
         self.shadow = None
         self.shadow_on = True
         self.net_run = None
@@ -201,6 +205,8 @@ struct Host(Movable):
         self.shadow = move.shadow^
         self.shadow_on = move.shadow_on
         self.b3_job = move.b3_job^
+        self.palette_dropped = move.palette_dropped
+        self.palette_used = move.palette_used
         self.net_run = move.net_run^
         self.net_on = move.net_on
         self.net_frame = move.net_frame
@@ -308,8 +314,13 @@ struct Host(Movable):
             cs.step(Real(1.0 / 60.0))
             crowd_rows = cs.positions()
             self.crowd = cs^
-            for r in crowd_rows:
-                var fr = (Int(self.clock * Float64(c.fps)) + r.offset) % c.frames
+            # the palette holds PALETTE_MATRICES matrices. A member that would not fit is dropped with the rest after
+            # it (the newest entries), and the count is kept in palette_dropped: the frame still draws.
+            for k in range(len(crowd_rows)):
+                if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
+                    self.palette_dropped += len(crowd_rows) - k
+                    break
+                var fr = (Int(self.clock * Float64(c.fps)) + crowd_rows[k].offset) % c.frames
                 crowd_bases.append(len(pal) // 16)
                 pal.extend(pose_palette_frame(c, fr))
         # the town (plan stage 3): 24 residents and the guard, each a CesiumMan at its ORCA position, its clip phase spread
@@ -319,11 +330,15 @@ struct Host(Movable):
             var tn = self.town.take()
             tn.step(Real(1.0 / 60.0), player)
             for k in range(len(tn.crowd.pos)):
+                if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
+                    self.palette_dropped += len(tn.crowd.pos) - k
+                    break
                 var fr = (Int(self.clock * Float64(c.fps)) + 7 * k) % c.frames
                 town_bases.append(len(pal) // 16)
                 pal.extend(pose_palette_frame(c, fr))
                 town_rows.append(tn.crowd.pos[k])
             self.town = tn^
+        self.palette_used = len(pal) // 16
         self.renderer.value().skin_palette = pal^
         # six units ahead of the eye, 1.5 to either side, feet on the ground (y = 0)
         var ahead = Float64(6.0)
@@ -350,7 +365,7 @@ struct Host(Movable):
             self.skin_fox, fox_base, 1 if self.fox_tex_loaded else 0, 3,  # material 1 and layer 3 once the Fox's texture is up
         ))
         # the crowd: each member at its position on the floor (the flow field's), feet on the ground
-        for k in range(len(crowd_rows)):
+        for k in range(len(crowd_bases)):  # the members that fit the palette (the rest were dropped above)
             var r = crowd_rows[k]
             var pos = Vec3(Real(r.x), Real(0.0), Real(r.z), Real(0.0))
             self.renderer.value().push(DrawItem(
@@ -430,6 +445,10 @@ struct Host(Movable):
             self.surface.present()
         self._finish_capture()
         return 1
+
+
+# the skinned palette holds this many matrices (the engine's limit); a member takes one matrix per joint
+comptime PALETTE_MATRICES = 4096
 
 
 def _host(handle: UInt64) -> Pointer[Host, MutUntrackedOrigin]:
@@ -656,20 +675,43 @@ def playground_host_net_check(latency: Int32, jitter: Int32, loss_permille: Int3
 @export
 def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
     """Step 7: a crowd of n members (0 removes it): ecs entities in both backends, moved by the flow field, drawn as
-    skinned CesiumMan. Returns n, -1 if n is out of range, -2 if the crowd could not be built (printed). A crowd too big
-    for the palette fails in the frame, not here (the engine's limit is 4096 matrices; docs/design/step7-crowd.md)."""
+    skinned CesiumMan. Returns n; -1 if n is out of range; -2 if the crowd could not be built (printed); -4 if the
+    characters on the page and the crowd would need more than PALETTE_MATRICES matrices (the town's residents count, once
+    the assets are up). A member that does not fit when the town is switched on after the crowd is dropped and counted
+    in playground_host_palette_dropped."""
     var h = _host(app)
     if n < 0 or n > 400:
         return -1
     if n == 0:
         h[].crowd = None
         return 0
+    if h[].placed:
+        var per = h[].cesium.value().copy().joint_count
+        var fixed = per + h[].fox.value().copy().joint_count
+        var residents = 0
+        if h[].town:
+            residents = len(h[].town.value().crowd.pos)
+        var need = fixed + (residents + Int(n)) * per
+        if need > PALETTE_MATRICES:
+            return -4
     try:
         h[].crowd = CrowdState(Int(n))
         return n
     except e:
         print("playground_host_crowd:", e)
         return -2
+
+
+@export
+def playground_host_palette_used(app: UInt64) abi("C") -> Int32:
+    """Step 7: matrices in the last frame's skinned palette (the characters, the crowd and the town)."""
+    return Int32(_host(app)[].palette_used)
+
+
+@export
+def playground_host_palette_dropped(app: UInt64) abi("C") -> Int32:
+    """Step 7: skinned members dropped because the palette was full, counted since the page started."""
+    return Int32(_host(app)[].palette_dropped)
 
 
 @export

@@ -172,5 +172,39 @@ const sw1 = await js('window.host.x.playground_host_crowd_switch(window.host.app
 const sw2 = await js('window.host.x.playground_host_crowd_switch(window.host.app)');
 need(sw1 === 1 && sw2 === 0, `crowd: the backend switch goes naive (${sw1}) then sparse-set (${sw2})`);
 need((await js('window.host.x.playground_host_crowd(window.host.app, 0)')) === 0, 'crowd: removed');
+// Step 7 palette guard (docs/design/step7-crowd.md; app/host.mojo PALETTE_MATRICES = 4096). The page starts with the town's
+// residents on (CesiumMan, 19 joints each). 200 members plus the residents need more matrices than the palette holds, so
+// the export refuses them (-4); 180 fits. With the town off, 213 members fit the palette and the town switched on after
+// them is dropped and counted. The palette is built only when the scene is drawn, so each step requests one captured frame.
+const drawOnce = () => js(`(async () => {
+  const h = window.host, x = h.x, app = h.app;
+  x.playground_host_request_capture(app);
+  for (let i = 0; i < 2000 && x.playground_host_capture_ptr(app) === 0n; i++) await new Promise((r) => requestAnimationFrame(r));
+  const ok = x.playground_host_capture_ptr(app) !== 0n;
+  if (ok) x.playground_host_capture_release(app);
+  return ok;
+})()`);
+const guardRefuse = await js('window.host.x.playground_host_crowd(window.host.app, 200)');
+need(guardRefuse === -4, `crowd guard: 200 members with the residents on are refused (code ${guardRefuse})`);
+const guardFit = await js('window.host.x.playground_host_crowd(window.host.app, 180)');
+need(guardFit === 180, `crowd guard: 180 members with the residents on are accepted (code ${guardFit})`);
+need(await drawOnce(), 'crowd guard: a frame with 180 members is drawn');
+const usedFit = await js('window.host.x.playground_host_palette_used(window.host.app)');
+const dropFit = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
+need(dropFit === 0, `crowd guard: nothing is dropped at 180 members with the residents on (${dropFit}; palette ${usedFit} matrices)`);
+await js('window.host.x.playground_host_crowd(window.host.app, 0)');
+await js('window.host.x.playground_host_town(window.host.app, 0)');
+need(await drawOnce(), 'crowd guard: a frame with the town off is drawn');
+const dropBase = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
+need((await js('window.host.x.playground_host_crowd(window.host.app, 213)')) === 213, 'crowd guard: 213 members fit with the town off');
+need(await drawOnce(), 'crowd guard: a frame with 213 members and the town off is drawn');
+const usedOff = await js('window.host.x.playground_host_palette_used(window.host.app)');
+await js('window.host.x.playground_host_town(window.host.app, 1)');
+need(await drawOnce(), 'crowd guard: a frame with the town switched on is drawn');
+const usedOn = await js('window.host.x.playground_host_palette_used(window.host.app)');
+const dropAfter = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
+console.log(`crowd guard: palette ${usedOff} matrices with 213 members and no town; ${usedOn} with the town on; dropped ${dropAfter - dropBase}`);
+need(dropAfter > dropBase, `crowd guard: the town switched on after a full crowd is dropped and counted (${dropAfter - dropBase} members)`);
+await js('window.host.x.playground_host_crowd(window.host.app, 0)');
 console.log(problems.length ? `host-check: FAIL\n  ${problems.join('\n  ')}` : 'host-check: PASS');
 done(problems.length ? 1 : 0);
