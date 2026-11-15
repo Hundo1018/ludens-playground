@@ -77,8 +77,14 @@ async function boot() {
   // the HUD's netcode check (step 8): the lossy session (latency 4, jitter 3, 10 % loss) on the page's wasm, shown as
   // text. The value is the reference hash (mod 1000000007); native prints the same. -1 would mean a peer did not converge.
   const netBtn = document.getElementById("net");
+  const sliders = [["lat", "latv", 1], ["jit", "jitv", 1], ["los", "losv", 1]];
+  for (const [id, shown] of sliders) {
+    const el = document.getElementById(id);
+    if (el) el.oninput = () => { const v = document.getElementById(shown); if (v) v.textContent = el.value; };
+  }
   if (netBtn) netBtn.onclick = () => {
-    const code = x.playground_host_net_check();
+    const val = (id) => Number(document.getElementById(id) ? document.getElementById(id).value : 0);
+    const code = x.playground_host_net_check(val("lat"), val("jit"), val("los") * 10);
     const out = document.getElementById("netout");
     if (out) out.textContent = code === 765407476 ? "converged (" + code + ", equal to native)" : "not converged (code " + code + ")";
   };
