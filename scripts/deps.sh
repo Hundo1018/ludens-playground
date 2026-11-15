@@ -7,12 +7,17 @@ while read -r name path rev; do
   case "$name" in ''|'#'*) continue ;; esac
   dst="build/deps/$name"
   if [ -f "$dst/.rev" ] && [ "$(cat "$dst/.rev")" = "$rev" ]; then continue; fi
+  # keep the export's pixi environment (.pixi, the engine's wasm env) across a rev change: pixi re-solves it if the
+  # manifest moved, instead of the environment vanishing with the old tree
+  keep=""
+  if [ -d "$dst/.pixi" ]; then keep="$(mktemp -d)"; mv "$dst/.pixi" "$keep/.pixi"; fi
   rm -rf "$dst"; mkdir -p "$dst"
   if git -C "$path" cat-file -e "$rev^{commit}" 2>/dev/null; then
     git -C "$path" archive "$rev" | tar -x -C "$dst"
   else
     git clone -q "https://github.com/Hundo1018/$name" "$dst.git" && git -C "$dst.git" archive "$rev" | tar -x -C "$dst" && rm -rf "$dst.git"
   fi
+  if [ -n "$keep" ]; then mv "$keep/.pixi" "$dst/.pixi"; rmdir "$keep"; fi
   echo "$rev" > "$dst/.rev"
   echo "deps: $name @ $rev"
 done < deps.lock

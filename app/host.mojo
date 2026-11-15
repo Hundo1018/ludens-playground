@@ -11,6 +11,8 @@ from geometry.vec import Real
 from hud import Hud
 from render3d import ArenaRenderer
 from app.mesh_pass import MeshRegistry, unit_cube_arrays
+from app.shadow_pass import ShadowPass
+from std.math import sqrt
 from app.net_predict import PredictRun, run_predict, PREDICT_T, PREDICT_SEED
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
@@ -109,6 +111,8 @@ struct Host(Movable):
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
+    var shadow: Optional[ShadowPass]  # the sun's depth pass into the mesh pass's shadow map; made on the first shadowed frame
+    var shadow_on: Bool  # ?noshadow turns the shadow factor and its pass off; on by default
     var net_run: Optional[PredictRun]  # step 8: the three-colour netcode run for player 0 (server, predicted, shown)
     var net_on: Bool  # the markers are drawn while on
     var net_frame: Int  # the frame counter that steps through the run, one run frame per draw
@@ -151,6 +155,8 @@ struct Host(Movable):
         self.town = None
         self.tex_job = None
         self.b3_job = None
+        self.shadow = None
+        self.shadow_on = True
         self.net_run = None
         self.net_on = False
         self.net_frame = 0
@@ -192,6 +198,8 @@ struct Host(Movable):
         self.crowd = move.crowd^
         self.town = move.town^
         self.tex_job = move.tex_job^
+        self.shadow = move.shadow^
+        self.shadow_on = move.shadow_on
         self.b3_job = move.b3_job^
         self.net_run = move.net_run^
         self.net_on = move.net_on
@@ -211,6 +219,8 @@ struct Host(Movable):
             self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=4)  # layers: white, wall, ground, the Fox
         self._register()
         self.renderer.value().begin(view)
+        # the mesh items that cast shadows: static meshes only (the skinned characters are not in the shadow pass yet)
+        var shadow_items = List[DrawItem]()
         for it in m.scene():
             var item = it.copy()
             if item.kind == 0:  # the scenery (ground tiles, walls, boxes) is textured on the mesh pass
@@ -220,11 +230,21 @@ struct Host(Movable):
                         item.layer = 2
                     item.mesh_id = self.wall_mesh  # walls keep layer 1
                     item.half = item.half * Real(2.0)  # the unit cube has half-extent 0.5; the mesh pass scales it by half
+            if item.mesh_id >= 0:
+                shadow_items.append(item.copy())
             self.renderer.value().push(item)
         if self.net_on and self.net_run:
             self._net_markers()
         self._characters(view, m.world.player_pos())  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
+        # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
+        var light = _light_vp()
+        self.renderer.value().mesh.set_shadow(self.boot.device(), light, self.shadow_on)
+        if self.shadow_on:
+            if not self.shadow:
+                self.shadow = ShadowPass(self.boot.device(), WGPUTextureFormat.Depth32Float)
+            var sview = self.renderer.value().mesh.shadow_tex.create_view_default()
+            self.shadow.value().draw(self.boot.device(), shadow_items, self.renderer.value().meshes, light, sview^)
         self.renderer.value().draw(self.boot.device(), target, self.width, self.height, self.hud.value())
         self.world = m^
 
@@ -448,6 +468,44 @@ def playground_host_input(app: UInt64, kind: Int32, key: Int32, action: Int32, m
 @export
 def playground_host_release_input(app: UInt64) abi("C"):
     _host(app)[].input.release_all()
+
+
+def _light_vp() -> List[Float32]:
+    """The sun's orthographic view-projection, 16 floats column-major, z in [0, 1]. The sun sits along (0.4, 1.0, 0.6),
+    the mesh shader's light direction, and looks back along it at the origin: half-extent 12 m across the view, depth
+    from -30 m to 30 m along it (nearer the sun is smaller). The hub frame lies inside the 12 m square."""
+    var lx = 0.4
+    var ly = 1.0
+    var lz = 0.6
+    var ln = sqrt(lx * lx + ly * ly + lz * lz)
+    # the view direction f points away from the sun
+    var fx = -lx / ln
+    var fy = -ly / ln
+    var fz = -lz / ln
+    # r = normalize(f x (0, 0, 1)) = (f.y, -f.x, 0); u = r x f
+    var rl = sqrt(fy * fy + fx * fx)
+    var rx = fy / rl
+    var ry = -fx / rl
+    var rz = 0.0
+    var ux = ry * fz - rz * fy
+    var uy = rz * fx - rx * fz
+    var uz = rx * fy - ry * fx
+    var half = 12.0
+    var depth = 60.0  # the depth range: 30 m either side of the origin
+    var m = List[Float32]()
+    # column 0: the right axis, the up axis and the view axis over (half, half, depth), then 0
+    m.append(Float32(rx / half)); m.append(Float32(ux / half)); m.append(Float32(fx / depth)); m.append(0.0)
+    m.append(Float32(ry / half)); m.append(Float32(uy / half)); m.append(Float32(fy / depth)); m.append(0.0)
+    m.append(Float32(rz / half)); m.append(Float32(uz / half)); m.append(Float32(fz / depth)); m.append(0.0)
+    # column 3: the translation that maps the depth range [-30, 30] to [0, 1]
+    m.append(0.0); m.append(0.0); m.append(0.5); m.append(1.0)
+    return m^
+
+
+@export
+def playground_host_shadow(app: UInt64, on: Int32) abi("C"):
+    """The shadow factor and the sun's depth pass: on by default, off for ?noshadow (the unshadowed colour)."""
+    _host(app)[].shadow_on = on != 0
 
 
 @export
