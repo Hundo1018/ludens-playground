@@ -485,6 +485,18 @@ def playground_host_frame(app: UInt64, dt: Float64) abi("C") -> Int32:
 
 
 @export
+def playground_host_set_frame_ms(app: UInt64, ms: Float64) abi("C"):
+    """The page's measured frame time (ms, around the previous playground_host_frame call); the HUD shows it."""
+    _host(app)[].frame_ms = Float32(ms)
+
+
+@export
+def playground_host_frame_ms(app: UInt64) abi("C") -> Float64:
+    """The frame time the HUD shows, in ms. 0 until the page has reported one."""
+    return Float64(_host(app)[].frame_ms)
+
+
+@export
 def playground_host_input(app: UInt64, kind: Int32, key: Int32, action: Int32, mods: Int32, x: Float64, y: Float64) abi("C"):
     """One input event from the page (the same codes the engine's app_input takes: GLFW keys and buttons)."""
     _host(app)[].input.process_event(MojoInputEvent(kind, key, action, mods, x, y))
