@@ -149,6 +149,7 @@ struct Frontier(Movable):
     var drawn: Int
     var culled: Int
     var culling: Bool  # False draws every loaded item: what culling saves can be measured
+    var debug: Bool  # ?debug: the HUD shows the streaming counters (W9)
     var wall_released: Bool  # W7: the fractured wall exists (it is added when the player comes near)
     var fracture_events: Int  # fracture events (bonds broken or fragments evicted) since the start (W7)
 
@@ -167,6 +168,7 @@ struct Frontier(Movable):
         self.drawn = 0
         self.culled = 0
         self.culling = True
+        self.debug = False
         self.wall_released = False
         self.fracture_events = 0
         self.player = DynamicCharacter.spawn(
@@ -194,6 +196,7 @@ struct Frontier(Movable):
         self.drawn = move.drawn
         self.culled = move.culled
         self.culling = move.culling
+        self.debug = move.debug
         self.wall_released = move.wall_released
         self.fracture_events = move.fracture_events
 

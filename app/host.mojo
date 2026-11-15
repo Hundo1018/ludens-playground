@@ -512,6 +512,16 @@ def playground_host_set_frame_ms(app: UInt64, ms: Float64) abi("C"):
 
 
 @export
+def playground_host_debug(app: UInt64, on: Int32) abi("C") -> Int32:
+    """W9: the HUD shows the streaming counters (?debug). Returns 0, or -1 when there is no Frontier world yet."""
+    var h = _host(app)
+    if not h[].world:
+        return -1
+    h[].world.value().world.debug = on != 0
+    return 0
+
+
+@export
 def playground_host_frame_ms(app: UInt64) abi("C") -> Float64:
     """The frame time the HUD shows, in ms. 0 until the page has reported one."""
     return Float64(_host(app)[].frame_ms)

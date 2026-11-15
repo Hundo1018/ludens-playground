@@ -12,16 +12,18 @@ from ui.geom import Rect
 
 
 def build_frontier_hud(f: Frontier, width: Float32, height: Float32, frame_ms: Float32) raises -> DrawList:
-    """`frame_ms` is the CPU time the page measured around the previous frame (0 when it has not said)."""
+    """`frame_ms` is the CPU time the page measured around the previous frame (0 when it has not said).
+    The streaming counters are shown only with `?debug` (f.debug); a visitor sees the zone and the frame time."""
     var dl = DrawList()
     var s = dot_scale(height)
     var pad = 4.0 * s
     var lines = List[String]()
     lines.append("ZONE " + zone_name(f.stat(STAT_ZONE)))
-    lines.append("CELLS " + String(f.stat(STAT_CELLS_LOADED)) + "/" + String(f.stat(STAT_CELLS_TOTAL)))
-    lines.append("BODIES " + String(f.stat(STAT_BODIES_LIVE)) + "/" + String(f.stat(STAT_BODIES_TOTAL)))
-    lines.append("DRAWN " + String(f.stat(STAT_DRAWN)) + " CULLED " + String(f.stat(STAT_CULLED)))
-    lines.append("LOADS " + String(f.stat(STAT_LOADS)) + " UNLOADS " + String(f.stat(STAT_UNLOADS)))
+    if f.debug:
+        lines.append("CELLS " + String(f.stat(STAT_CELLS_LOADED)) + "/" + String(f.stat(STAT_CELLS_TOTAL)))
+        lines.append("BODIES " + String(f.stat(STAT_BODIES_LIVE)) + "/" + String(f.stat(STAT_BODIES_TOTAL)))
+        lines.append("DRAWN " + String(f.stat(STAT_DRAWN)) + " CULLED " + String(f.stat(STAT_CULLED)))
+        lines.append("LOADS " + String(f.stat(STAT_LOADS)) + " UNLOADS " + String(f.stat(STAT_UNLOADS)))
     var tenths = Int(frame_ms * 10.0)
     lines.append("FRAME " + String(tenths // 10) + "." + String(tenths % 10) + " MS")
     var pw = Float32(0)
