@@ -27,12 +27,26 @@ python3 -m ludens_wasm_rt.build_wasm \
   tests/frontier_net_native.mojo --target native -o build/frontier_net_native
 build/frontier_net_native
 # W10: the GPU ray trace over the hub's BVH agrees with the CPU raycast (hit flags and distances)
+# W6: one goal per zone at its fast-travel point, each counted once
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
   -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
   -I build/deps/ludens-engine -I . -I app \
   tests/rt_native.mojo --target native -o build/rt_native
 build/rt_native
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/goals_native.mojo --target native -o build/goals_native
+build/goals_native
+# W7: the quarry wall falls and breaks; the scenario that does not break is checked too
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/quarry_native.mojo --target native -o build/quarry_native
+build/quarry_native
 # step 7 (crowd): ecs entities moved by the flow field; the two backends agree; a switch keeps the crowd
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
