@@ -73,7 +73,11 @@ const differ = (a, b) => { let n = 0; for (let q = 0; q < a.length; q += 4) if (
 for (let i = 0; i < 240; i++) { if ((await js('window.host && window.host.frames')) > 10) break; await sleep(250); }
 console.log('frames', await js('window.host && window.host.frames'), 'error', await js('window.host && window.host.error'));
 need((await js('window.host && window.host.frames')) > 10, 'the Frontier page draws frames');
-need((await js('window.host.x.playground_host_frame_ms(window.host.app)')) > 0, 'the HUD frame time is the page\'s measurement (W2: not 0)');
+// W2: the HUD's frame time is the page's measurement. One frame can measure 0 when it is faster than the clock's
+// resolution, so the check passes when any of 30 consecutive frames measures above 0.
+let frameMax = 0;
+for (let i = 0; i < 30; i++) { frameMax = Math.max(frameMax, await js('window.host.x.playground_host_frame_ms(window.host.app)')); await sleep(40); }
+need(frameMax > 0, `the HUD frame time is the page's measurement (W2: max over 30 frames ${frameMax.toFixed(3)} ms)`);
 const hub = await grab('hub');
 await key('keydown', 'KeyW'); await key('keydown', 'KeyD');
 await sleep(2500);
