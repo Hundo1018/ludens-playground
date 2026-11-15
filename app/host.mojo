@@ -96,6 +96,8 @@ struct Host(Movable):
     var wall: Optional[List[List[UInt8]]]
     var ground: Optional[List[List[UInt8]]]  # the rock texture for the flat ground tiles (layer 2)
     var ground_loaded: Bool
+    var fox_tex: Optional[List[List[UInt8]]]  # the Fox's own base colour (layer 3), from its GLB
+    var fox_tex_loaded: Bool
     var clock: Float64  # seconds of animation, advanced per frame
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
     var skin_cesium: Int
@@ -131,6 +133,8 @@ struct Host(Movable):
         self.wall = None
         self.ground = None
         self.ground_loaded = False
+        self.fox_tex = None
+        self.fox_tex_loaded = False
         self.clock = 0.0
         self.placed = False
         self.skin_cesium = -1
@@ -166,6 +170,8 @@ struct Host(Movable):
         self.wall = move.wall^
         self.ground = move.ground^
         self.ground_loaded = move.ground_loaded
+        self.fox_tex = move.fox_tex^
+        self.fox_tex_loaded = move.fox_tex_loaded
         self.clock = move.clock
         self.placed = move.placed
         self.skin_cesium = move.skin_cesium
@@ -186,7 +192,7 @@ struct Host(Movable):
         if not self.hud:
             self.hud = Hud(self.boot.device(), format)
         if not self.renderer:
-            self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=3)  # layers: white, wall, ground
+            self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=4)  # layers: white, wall, ground, the Fox
         self._register()
         self.renderer.value().begin(view)
         for it in m.scene():
@@ -207,6 +213,9 @@ struct Host(Movable):
         if self.ground and not self.ground_loaded and self.renderer:
             self.renderer.value().textures.load_layer(self.boot.device(), UInt32(2), self.ground.value().copy())
             self.ground_loaded = True
+        if self.fox_tex and not self.fox_tex_loaded and self.renderer:
+            self.renderer.value().textures.load_layer(self.boot.device(), UInt32(3), self.fox_tex.value().copy())
+            self.fox_tex_loaded = True
         if self.placed or not self.cesium or not self.fox or not self.wall:
             return
         var c = self.cesium.value().copy()
@@ -278,7 +287,7 @@ struct Host(Movable):
         self.renderer.value().push(DrawItem(
             -1, fpos, 0.0, sin(half_h), 0.0, cos(half_h),
             Vec3(Real(0.01), Real(0.01), Real(0.01), Real(0.0)), Vec3(Real(0.9), Real(0.85), Real(0.7), Real(0.0)),
-            self.skin_fox, fox_base, 0,
+            self.skin_fox, fox_base, 1 if self.fox_tex_loaded else 0, 3,  # material 1 and layer 3 once the Fox's texture is up
         ))
         # the crowd: each member at its position on the floor (the flow field's), feet on the ground
         for k in range(len(crowd_rows)):
@@ -459,6 +468,8 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
             h[].wall = parse_ltexture(bytes)
         elif kind == 4:
             h[].ground = parse_ltexture(bytes)
+        elif kind == 5:
+            h[].fox_tex = parse_ltexture(bytes)
         else:
             raise Error("playground_host_asset: unknown kind " + String(kind))
         return 0

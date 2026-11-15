@@ -39,8 +39,10 @@ python3 scripts/retarget.py --check-clips "$CONV/CesiumMan.lcharacter" build/ass
 python3 scripts/convert_glb.py build/assets/src/Fox.glb "$CONV/Fox.lcharacter"
 python3 scripts/convert_texture.py build/assets/src/concrete_wall_008_diff_1k.jpg "$CONV/concrete_wall_008.ltexture"
 python3 scripts/convert_texture.py build/assets/src/rocks_ground_01_diff_1k.jpg "$CONV/rocks_ground_01.ltexture"
+python3 scripts/extract_glb_texture.py build/assets/src/Fox.glb 0 "$CONV/fox_base.png"
+python3 scripts/convert_texture.py "$CONV/fox_base.png" "$CONV/fox_base.ltexture"
 # the page ships these three; nothing else in the converted directory
-for f in CesiumMan.lcharacter Fox.lcharacter concrete_wall_008.ltexture rocks_ground_01.ltexture; do cp "$CONV/$f" "$OUT/assets/"; done
+for f in CesiumMan.lcharacter Fox.lcharacter concrete_wall_008.ltexture rocks_ground_01.ltexture fox_base.ltexture; do cp "$CONV/$f" "$OUT/assets/"; done
 python3 scripts/write_index.py "$OUT/assets" "$OUT/assets/index.json"
 python3 scripts/write_credits_html.py assets/CREDITS.md "$OUT/credits.html"
 WGPU=build/deps/wgpu-mojo
