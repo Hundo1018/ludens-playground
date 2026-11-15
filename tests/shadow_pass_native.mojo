@@ -52,7 +52,7 @@ def main() raises:
     print('m3 mesh added', flush=True)
     var items = List[DrawItem]()
     # half 1.0 scales the unit cube (half-extent 0.5) to a box of half-extent 0.5, centred at the origin.
-    items.append(DrawItem(0, Vec3(0.0, 0.0, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(1.0, 1.0, 1.0), Vec3(0.5, 0.5, 0.5), mid))
+    items.append(DrawItem(0, Vec3(0.0, 0.0, 0.0, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(1.0, 1.0, 1.0, 0.0), Vec3(0.5, 0.5, 0.5, 0.0), mid))
 
     print('m4 item added', flush=True)
     # Orthographic light: x and y untouched, z' = 0.5 z + 0.5. Column-major: column 2 holds (0, 0, 0.5, 0) and column 3
