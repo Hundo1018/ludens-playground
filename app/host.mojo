@@ -122,6 +122,10 @@ struct Host(Movable):
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var contacts: Int  # W6: the guard touched the player (the player is sent back to the hub)
     var reset_player: Bool  # W6: set by a contact this frame, acted on after the draw
+    var knock_pending: Bool  # B4: a contact this frame knocks the guard down (a figure on ball joints in its place)
+    var knock_pos: Vec3
+    var knock_dir: Vec3
+    var guard_down: Int  # B4: frames left with the skinned guard hidden while its figure lies on the ground
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
     var palette_dropped: Int  # skinned members that did not fit PALETTE_MATRICES, counted since the page started
@@ -185,6 +189,10 @@ struct Host(Movable):
         self.ext_rows = List[CrowdRow]()
         self.contacts = 0
         self.reset_player = False
+        self.knock_pending = False
+        self.knock_pos = Vec3(Real(0.0), Real(0.0), Real(0.0), Real(0.0))
+        self.knock_dir = Vec3(Real(0.0), Real(0.0), Real(0.0), Real(0.0))
+        self.guard_down = 0
         self.tex_job = None
         self.b3_job = None
         self.palette_dropped = 0
@@ -248,6 +256,10 @@ struct Host(Movable):
         self.town = move.town^
         self.contacts = move.contacts
         self.reset_player = move.reset_player
+        self.knock_pending = move.knock_pending
+        self.knock_pos = move.knock_pos
+        self.knock_dir = move.knock_dir
+        self.guard_down = move.guard_down
         self.tex_job = move.tex_job^
         self.shadow = move.shadow^
         self.shadow_on = move.shadow_on
@@ -297,9 +309,6 @@ struct Host(Movable):
             self._net_markers()
         var cview = View(m.camera(), Real(Float64(self.width) / Float64(self.height)))  # the crowd's visible set (W11 LOD)
         self._characters(m.world.player_pos(), m.world.player_vel(), cview)  # read while the world is held here, not inside _characters
-        if self.reset_player:  # W6: a guard contact sends the player back to the hub (the next frame shows it there)
-            self.reset_player = False
-            m.world.teleport(0.0, 0.0)  # m holds the world here: self.world is None until it is restored below
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
         var light = _light_vp()
@@ -468,11 +477,7 @@ struct Host(Movable):
         var town_guard = -1  # W6: the guard's row, drawn in a distinct colour
         if self.town:
             var tn = self.town.take()
-            tn.step(Real(1.0 / 60.0), player)
             town_guard = tn.guard
-            if tn.guard_distance(player) < CONTACT_R:
-                self.contacts += 1
-                self.reset_player = True
             for k in range(len(tn.crowd.pos)):
                 if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
                     self.palette_dropped += len(tn.crowd.pos) - k
@@ -526,6 +531,8 @@ struct Host(Movable):
             ))
 
         for k in range(len(town_rows)):
+            if k == town_guard and self.guard_down > 0:
+                continue  # B4: the guard's figure lies on the ground (the Frontier draws it)
             var tp = town_rows[k]
             var pos = Vec3(tp[0], Real(0.0), tp[2], Real(0.0))
             self.renderer.value().push(DrawItem(
@@ -561,12 +568,43 @@ struct Host(Movable):
         var intent = self.controls.poll(read_keys(self.input))
         var m = self.world.take()
         m.step(intent, min(dt, 0.1))
+        self._town_step(m)
         self.world = m^
         self._audio_goals()
         var rc = self._frame_draw()
         # Every frame ends here, drawn or not: a key edge or a pointer movement lasts exactly one frame.
         self.input.begin_frame()
         return rc
+
+    def _town_step(mut self, mut m: FrontierMode) raises:
+        """The town steps with the simulation, not the draw: an offscreen page (no draw) still runs its residents and guard.
+        W6: a guard contact sends the player back to the hub on the next frame. B4: it also knocks the guard down."""
+        if self.guard_down > 0:
+            self.guard_down -= 1
+        if self.reset_player:
+            self.reset_player = False
+            m.world.teleport(0.0, 0.0)
+        if self.knock_pending:
+            self.knock_pending = False
+            m.world.knock_down(self.knock_pos, self.knock_dir)
+        if not self.town:
+            return
+        var player = m.world.player_pos()
+        var tn = self.town.take()
+        tn.step(Real(1.0 / 60.0), player)
+        if tn.guard_distance(player) < CONTACT_R:
+            self.contacts += 1
+            self.reset_player = True
+            # B4: the tackle knocks the guard down: a figure on ball joints falls where it stood, pushed toward the player
+            var gp = tn.crowd.pos[tn.guard]
+            var dx = player[0] - gp[0]
+            var dz = player[2] - gp[2]
+            var dl = (dx * dx + dz * dz) ** Real(0.5)
+            self.knock_pending = True
+            self.knock_pos = gp
+            self.knock_dir = Vec3(dx / dl, Real(0.0), dz / dl, Real(0.0)) if dl > Real(1e-6) else Vec3(Real(1.0), Real(0.0), Real(0.0), Real(0.0))
+            self.guard_down = 180
+        self.town = tn^
 
     def _audio_goals(mut self) raises:
         """W8: each zone goal reached starts the goal sound once."""

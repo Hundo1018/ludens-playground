@@ -69,6 +69,9 @@ comptime STAT_FREE_FRAGMENTS = 11  # fragments of the quarry wall that have come
 comptime STAT_FRAGMENTS = 12  # fragments the quarry wall was cut into (W7)
 comptime STAT_GOALS = 15  # zone goals reached, 0 to 4 (W6)
 comptime STAT_BOB_Z_MM = 16  # B1: the pendulum bob's z in millimetres; -1 before the pendulum exists
+comptime STAT_RAG_PELVIS_MM = 21  # B4: the knocked-down figure's pelvis height in millimetres; -1 before any
+comptime STAT_RAG_X_MM = 22  # B4: its pelvis x and z in millimetres (0 before any)
+comptime STAT_RAG_Z_MM = 23
 comptime GOAL_R: Real = 4.0  # a goal is reached within this distance (metres)
 comptime GOAL_COUNT = 4
 comptime QUARRY_WALL = Vec3(112.0, 2.0, -124.0, 0.0)  # the quarry's fractured wall, standing on the ground 12 m past the quarry goal (plan card 2a)
@@ -234,6 +237,8 @@ struct Frontier(Movable):
     var flag: Optional[MeshCloth]  # B3: the banner, a cloth stepped in its own contact scene
     var flag_scene: ContactScene6[QuatBody6]
     var flag_rest: List[Vec3]
+    var rag: List[Int64]  # B4: the knocked-down figure's bodies (pelvis first)
+    var rag_joints: List[Int]
     var fracture_events: Int  # fracture events (bonds broken or fragments evicted) since the start (W7)
 
     def __init__(out self) raises:
@@ -267,6 +272,8 @@ struct Frontier(Movable):
         self.flag = None
         self.flag_scene = ContactScene6[QuatBody6]()
         self.flag_rest = List[Vec3]()
+        self.rag = List[Int64]()
+        self.rag_joints = List[Int]()
         self.player = DynamicCharacter.spawn(
             self.world.scene,
             QuatBody6.at_rest(Vec3(0.0, 1.0, 0.0, 0.0), Inertia3.box(80.0, 0.3, 0.9, 0.3)),
@@ -306,6 +313,8 @@ struct Frontier(Movable):
         self.flag = move.flag^
         self.flag_scene = move.flag_scene^
         self.flag_rest = move.flag_rest^
+        self.rag = move.rag^
+        self.rag_joints = move.rag_joints^
 
     # ------------------------------------------------------------------------------------------------- building
 
@@ -487,6 +496,10 @@ struct Frontier(Movable):
                 var d = xs[i] - self.flag_rest[i]
                 worst = max(worst, sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]))
             return Int(worst * Real(1000000.0))
+        if which == STAT_RAG_X_MM or which == STAT_RAG_Z_MM:
+            return Int(self.world.state(self.rag[0]).pos[0 if which == STAT_RAG_X_MM else 2] * Real(1000.0)) if len(self.rag) > 0 else 0
+        if which == STAT_RAG_PELVIS_MM:
+            return Int(self.world.state(self.rag[0]).pos[1] * Real(1000.0)) if len(self.rag) > 0 else -1
         if which == STAT_GOALS:
             return self.goal_count
         if which == STAT_FREE_FRAGMENTS:
@@ -589,6 +602,20 @@ struct Frontier(Movable):
                     var a = j * (FLAG_NX + 1) + i
                     var c = a + FLAG_NX + 1
                     out.append(_cell_item(xs[a], xs[a + 1], xs[c], xs[c + 1], Vec3(0.75, 0.15, 0.12, 0.0)))
+        # B4: the knocked-down figure (red, as the guard)
+        for i in range(len(self.rag)):
+            var rs = self.world.state(self.rag[i])
+            var half = Vec3(0.18, 0.1, 0.12, 0.0)
+            if i == 1:
+                half = Vec3(0.2, 0.28, 0.12, 0.0)
+            elif i == 2:
+                half = Vec3(0.13, 0.13, 0.13, 0.0)
+            elif i == 3 or i == 4:
+                half = Vec3(0.07, 0.28, 0.07, 0.0)
+            elif i == 5:
+                half = Vec3(0.06, 0.25, 0.06, 0.0)
+            out.append(DrawItem(1 if i == 2 else 0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
+                                half, Vec3(0.85, 0.12, 0.1, 0.0)))
         # the player is drawn by the host as a skinned character (plan W3), not here
         self.drawn = len(out)
         self.culled = culled
@@ -672,6 +699,30 @@ struct Frontier(Movable):
             fl.pin(j * (FLAG_NX + 1))
         self.flag_rest = fl.x.copy()
         self.flag = fl^
+    def knock_down(mut self, pos: Vec3, push: Vec3) raises:
+        """B4 (RDR2's physics-based reactions): a figure of six bodies on ball joints (pelvis, torso, head, two thighs, an
+        arm) stands at pos and is pushed along push; it falls under physics. A new knock-down removes the previous one."""
+        for j in self.rag_joints:
+            self.world.remove_joint(j)
+        for h in self.rag:
+            self.world.remove(h)
+        self.rag = List[Int64]()
+        self.rag_joints = List[Int]()
+        var b = Vec3(pos[0], 0.0, pos[2], 0.0)
+        var pelvis = self.world.add_box(b + Vec3(0.0, 1.0, 0.0, 0.0), Vec3(0.18, 0.1, 0.12, 0.0), 12.0, False)
+        var torso = self.world.add_box(b + Vec3(0.0, 1.38, 0.0, 0.0), Vec3(0.2, 0.28, 0.12, 0.0), 20.0, False)
+        var head = self.world.add_sphere(b + Vec3(0.0, 1.79, 0.0, 0.0), 0.13, 5.0, False)
+        var lthigh = self.world.add_box(b + Vec3(-0.1, 0.62, 0.0, 0.0), Vec3(0.07, 0.28, 0.07, 0.0), 7.0, False)
+        var rthigh = self.world.add_box(b + Vec3(0.1, 0.62, 0.0, 0.0), Vec3(0.07, 0.28, 0.07, 0.0), 7.0, False)
+        var arm = self.world.add_box(b + Vec3(-0.27, 1.41, 0.0, 0.0), Vec3(0.06, 0.25, 0.06, 0.0), 4.0, False)
+        self.rag.append(pelvis); self.rag.append(torso); self.rag.append(head)
+        self.rag.append(lthigh); self.rag.append(rthigh); self.rag.append(arm)
+        self.rag_joints.append(self.world.add_ball_joint(pelvis, torso, Vec3(0.0, 0.1, 0.0, 0.0), Vec3(0.0, -0.28, 0.0, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(torso, head, Vec3(0.0, 0.28, 0.0, 0.0), Vec3(0.0, -0.13, 0.0, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(pelvis, lthigh, Vec3(-0.1, -0.1, 0.0, 0.0), Vec3(0.0, 0.28, 0.0, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(pelvis, rthigh, Vec3(0.1, -0.1, 0.0, 0.0), Vec3(0.0, 0.28, 0.0, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(torso, arm, Vec3(-0.27, 0.28, 0.0, 0.0), Vec3(0.0, 0.25, 0.0, 0.0)))
+        self.world.apply_impulse(torso, push * Real(60.0) + Vec3(0.0, 10.0, 0.0, 0.0))
 
     def _tick(mut self, intent: Intent, jump: Bool) raises:
         self.tick += 1
