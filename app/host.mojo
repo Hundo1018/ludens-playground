@@ -13,7 +13,7 @@ from render3d import ArenaRenderer
 from app.mesh_pass import MeshRegistry, unit_cube_arrays
 from app.shadow_pass import ShadowPass
 from std.math import sqrt
-from app.net_predict import PredictRun, run_predict, PREDICT_T, PREDICT_SEED
+from app.net_predict import PredictRun, run_predict_coupled, PREDICT_T, PREDICT_SEED
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
@@ -623,7 +623,7 @@ def playground_host_netview(app: UInt64, on: Int32, latency: Int32, jitter: Int3
     if latency < 0 or latency > 30 or jitter < 0 or jitter > 10 or loss_permille < 0 or loss_permille > 500:
         return -3
     try:
-        h[].net_run = run_predict(Int(latency), Int(jitter), Real(Float64(loss_permille) / 1000.0), PREDICT_SEED, PREDICT_T)
+        h[].net_run = run_predict_coupled(Int(latency), Int(jitter), Real(Float64(loss_permille) / 1000.0), PREDICT_SEED, PREDICT_T)
         h[].net_frame = 0
         return 0
     except e:
