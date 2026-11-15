@@ -102,6 +102,28 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 ## Step 8: display error of a snapshot client, 0 to 150 ms (native)
 
 Second table of `benchmarks/net_latency_150ms.mojo`, 10 % loss, jitter 3, three seeds per row. Lag is the server tick minus the tick client 0 shows. Mean lag: 1.7 ticks at 0 ms, 8.0 at 50 ms, 10.7 at 150 ms; the maximum is 15 ticks (about 250 ms) at 100, 133 and 150 ms. Target displacement between the shown and the server tick: 1.25 to 2.5 m (mean 1.25 to 2.1 m). This is the display error of a snapshot client, not a prediction error: SnapshotClient does not predict, and RollbackPeer (the prediction seam in ludens-core) is not used. The prediction-error bound is still unmeasured.
+## Step 8: the three-colour draw, the spec as written
+
+The plan names a "three-colour draw" in step 8 and defines it nowhere else in `docs/`. Read as the three states a netcode view can show: the server's state, the state the client shows, and a predicted state. `SnapshotClient` shows the last received snapshot and has no predicted state, so the third colour is absent from the playground. The draw of the two available states (server and client-shown) is not built yet. The prediction-error bound is the separate, still-open item.
+## Step 5: shadow depth pass, native
+
+`app/shadow_pass.mojo` draws the mesh items from an orthographic light into a Depth32Float texture, with no fragment stage. `tests/shadow_pass_native.mojo`: a unit box's centre reads depth 0.25 (its near face) and an open corner reads the cleared 1.0 (2 of 2 checks). Found and fixed on the way: `Vec3` takes four components (`Vec3(x, y, z, 0)`); three gave a run-time segfault. Not yet: sampling the map in the mesh fragment shader with PCF, and the hub-frame shadowed-pixel fraction.
+
+## Status table (step → deliverable → evidence)
+
+| Step | Literal deliverable (docs/PLAN.md) | Evidence | Status |
+|---|---|---|---|
+| 1 Host for an outside game | engine seam generic over `GameMode`; playground runs through it | engine `app/main.mojo`, `game/mode.mojo`; #33 page | done |
+| 2 Frontier page | page in this repo | `page/index.html`, `page/app.js` (deviation: `app.js`, not `app.ts`); `host_check`, `touch_check` in CI (deviation: no `frontier_check.mjs` port) | done, deviated |
+| 3 Pages | deploy from main | run 24/120 for `ae83a36`; PR #34 merged | done |
+| 4 Asset pipeline | manifest, fetch, converters, credits | `fetch_assets.py --check`: 19 entries OK | done |
+| 5 Rendering | indexed mesh, skinned mesh, textures, triplanar ground, parity | #64–#66 engine; B3 parity on lavapipe; #36, #38 page | done |
+| 6 Characters and motion | CesiumMan, Fox, CMU motion, MotionDB | `host_check` M6: motion matching equals native (hash 992661) | done |
+| 7 Crowd | crowd in ecs.World, instanced skinned draws, HUD backend switch | #40 native 3b-0 numbers; `crowd_native` 5/5; browser SYNC timings environment-limited | native done; browser environment-limited |
+| 8 Range networking | server module, SnapshotServer/Client, SimLink, lag-compensated hits | `net_frontier.mojo`, `frontier_net_native` 11/11; #41 latency sweep (convergence 0–150 ms); #43 display error | partly done; see below |
+
+Step 8, still open against the literal text: the SimLink latency controls on the page (no user-set latency yet), the prediction-error bound (not in `docs/PLAN.md`; decide whether it applies), and a two-colour draw of server and client-shown state.
+Step 5 shadows are not in the literal step 5 text; they come from user feedback #5 and are tracked as their own item.
 
 ## Done means
 
