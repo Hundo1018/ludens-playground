@@ -63,6 +63,10 @@ jobs:
         run: |
           pixi run --manifest-path engine/pixi.toml -e wasm node scripts/touch_check.mjs \
             "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen&pad=1" 240
+      - name: "Camera look: a left-button drag turns the camera by 300 px x 0.006 rad, a move without a button does not (scripts/look_check.mjs)"
+        run: |
+          pixi run --manifest-path engine/pixi.toml -e wasm node scripts/look_check.mjs \
+            "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen" 240
       - name: Native and wasm give the same numbers
         run: |
           HOST="$(pixi run --manifest-path engine/pixi.toml -e wasm python3 -c 'import ludens_wasm_rt; print(ludens_wasm_rt.HOST_MJS)')"

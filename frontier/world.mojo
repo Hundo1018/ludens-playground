@@ -61,6 +61,7 @@ comptime STAT_LOADS = 6
 comptime STAT_UNLOADS = 7
 comptime STAT_ZONE = 8
 comptime STAT_TICK = 9
+comptime STAT_YAW_MRAD = 10  # the camera yaw in milliradians (W1: the mouse and pad look)
 
 comptime FNV_PRIME = UInt64(0x100000001B3)
 
@@ -305,6 +306,8 @@ struct Frontier(Movable):
             return self.zone()
         if which == STAT_TICK:
             return self.tick
+        if which == STAT_YAW_MRAD:
+            return Int(self.yaw * 1000.0)
         return -1
 
     def hash(self) -> UInt64:
