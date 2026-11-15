@@ -10,7 +10,7 @@ from game.controls import Controls
 from geometry.vec import Real
 from hud import Hud
 from render3d import ArenaRenderer
-from app.mesh_pass import MeshRegistry
+from app.mesh_pass import MeshRegistry, unit_cube_arrays
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
@@ -103,6 +103,7 @@ struct Host(Movable):
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
     var skin_cesium: Int
     var skin_fox: Int
+    var wall_mesh: Int  # the unit cube on the mesh pass, for the taller scenery (walls, boxes); -1 until registered
     var crowd: Optional[CrowdState]  # the crowd of step 7 (ecs entities, flow field), None until asked for
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var tex_job: Optional[TexReadback]
@@ -141,6 +142,7 @@ struct Host(Movable):
         self.placed = False
         self.skin_cesium = -1
         self.skin_fox = -1
+        self.wall_mesh = -1
         self.crowd = None
         self.town = None
         self.tex_job = None
@@ -179,6 +181,7 @@ struct Host(Movable):
         self.placed = move.placed
         self.skin_cesium = move.skin_cesium
         self.skin_fox = move.skin_fox
+        self.wall_mesh = move.wall_mesh
         self.crowd = move.crowd^
         self.town = move.town^
         self.tex_job = move.tex_job^
@@ -202,8 +205,12 @@ struct Host(Movable):
             var item = it.copy()
             if item.kind == 0:  # the scenery (ground, walls, boxes) is textured: the concrete wall on layer 1
                 item.material = 2
-                if self.ground_loaded and item.half[1] <= Real(0.1):  # the flat ground tiles (half height 0.05) on layer 2
-                    item.layer = 2
+                if item.half[1] <= Real(0.1):  # the flat ground tiles (half height 0.05) on layer 2, on the primitive path
+                    if self.ground_loaded:
+                        item.layer = 2
+                elif self.wall_mesh >= 0:  # the taller scenery (walls, boxes) on the mesh pass, which samples layer 1
+                    item.mesh_id = self.wall_mesh
+                    item.half = item.half * Real(2.0)  # the unit cube has half-extent 0.5; the mesh pass scales it by half
             self.renderer.value().push(item)
         self._characters(view, m.world.player_pos())  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
@@ -226,6 +233,8 @@ struct Host(Movable):
         var f = self.fox.value().copy()
         self.skin_fox = self.renderer.value().meshes.add_skinned(f.positions.copy(), f.normals.copy(), f.uv.copy(), f.joints.copy(), f.weights.copy(), f.indices.copy())
         self.renderer.value().textures.load_layer(self.boot.device(), UInt32(1), self.wall.value().copy())
+        var cube = unit_cube_arrays()
+        self.wall_mesh = self.renderer.value().meshes.add_static(cube[0].copy(), cube[1].copy(), cube[2].copy(), cube[3].copy())
         self.placed = True
 
     def _characters(mut self, view: View, player: Vec3) raises:
@@ -451,7 +460,7 @@ def playground_host_capture_release(app: UInt64) abi("C"):
 
 @export
 def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64) abi("C") -> Int32:
-    """A converted asset from the page: 1 CesiumMan.lcharacter, 2 Fox.lcharacter, 3 concrete_wall_008.ltexture. The bytes
+    """A converted asset from the page: 1 CesiumMan.lcharacter, 2 Fox.lcharacter, 3 concrete_wall_003.ltexture. The bytes
     are copied here, so the page may free its buffer when this returns. 0 ok, -1 failed."""
     var h = _host(app)
     try:

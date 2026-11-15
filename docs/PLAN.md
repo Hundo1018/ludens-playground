@@ -62,6 +62,12 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
 
 Source contrast (luminance std-dev of the 1024 px JPEG resized to 256 px): rock 29.9, concrete wall 2.6. The concrete source is almost flat, so the flat walls come from the asset. The rock source has high contrast, so the low rendered ground contrast (10.25) comes from the render path (triplanar scale, lighting, mips). Next: pick a higher-contrast CC0 wall texture (manifest change); sweep the triplanar scale in the engine for the ground.
 
+## Wall texture (step 5)
+
+`concrete_wall_003` replaces `concrete_wall_008` (source std-dev 27.8, against 2.6). The hub frame does not change: 0 of 518,400 pixels differ between the old and new captures (`scripts/texture_compare.py`). Cause: a scene box with `mesh_id = -1` takes the primitive path in the engine's `app/render3d.mojo`, which carries no texture and ignores `material` and `layer`. The host sets `material = 2` on walls but gives them no mesh. Fix: register a unit cube with `renderer.meshes.add_static` and set the wall items' `mesh_id` to it (the mesh pass samples triplanar on layer 1). Then re-measure.
+
+Result after the mesh change: walls are drawn on the mesh pass with layer 1 (`concrete_wall_003`), and the pillars show the concrete texture at the same size. 9.18% of the hub frame differs from the untextured-mesh capture (`scripts/texture_compare.py`); the pillar crop's mean moves by 21 to 40 luminance levels. The ground crop is unchanged (10.25 vs 10.14). Next: the triplanar scale for the walls (0.25 per metre) and the ground's contrast.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
