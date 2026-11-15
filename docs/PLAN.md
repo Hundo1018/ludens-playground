@@ -24,8 +24,15 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
   (playground #3, merged). Native and wasm agree (`scripts/check_parity.sh`).
 - Touch: the engine's virtual pad (`vpad.ts`, `vpad_view.ts`) is mounted on the page; its stick and buttons reach the
   host as W A S D, Space and R (`scripts/touch_check.mjs`, three runs in CI).
-- Open: the Frontier **page** here (today it exists only in the engine, which still serves `?frontier`); engine #59 removes
-  that copy and must not merge before the page exists here.
+- Page: the Frontier page is here (`page/index.html`, `page/app.js`, not the `index.html` / `app.ts` the earlier draft named).
+  Pages deploys it from main (`pages build and deployment` run 24 for `ae83a36`: success). CI run 120 for `ae83a36` is the
+  check that gates the rest.
+- Ordering gap: engine #59 (removes the engine's `?frontier` page) merged on 2026-11-14 at 06:46 UTC. The first playground
+  page build was on 2026-11-15 at 07:31 UTC. The rule "merge #59 only after the page exists here" was not followed; for
+  about a day the engine served no Frontier page. This cannot be undone and is recorded here.
+- Step status (evidence): 1 engine seam is generic (`app/main.mojo` and `game/mode.mojo` use `M: GameMode`; playground
+  `frontier` runs through it). 4 asset pipeline: `python3 scripts/fetch_assets.py --check` reports 19 manifest entries
+  consistent with credits (run in CI). 5, 7, 8 and stage 2: not started.
 
 ## Steps, in order
 
