@@ -51,7 +51,7 @@ def median(mut xs: List[Float64]) -> Float64:
 
 
 def main() raises:
-    var counts = List[Int](10000, 50000, 100000)
+    var counts: List[Int] = [10000, 50000, 100000]
     var samples = 30
     var dt = Real(1.0 / 60.0)
     print("| backend | N | median ms/step | p90 ms/step | samples |")
