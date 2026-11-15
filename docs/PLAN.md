@@ -89,6 +89,10 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 - Present in ludens-core only: a rollback and prediction seam (`gameplay/netcode.mojo`, `RollbackPeer`, ROADMAP 17.16). The playground does not use it for a measured prediction error.
 - Absent from the playground: a measured prediction-error bound (the plan's 150 ms check) and the three-colour draw. Neither appears in `app/`, `page/` or `scripts/`.
 
+## Step 5: shadow probe, native (depth through a comparison sampler)
+
+`tests/shadow_probe_native.mojo`: a Depth32Float texture written by a render pass cleared to 0.5, sampled once in a compute shader through a LessEqual comparison sampler at references 0.25 and 0.75. Result: 1.0 and 0.0 (2 of 2 checks). The depth-plus-comparison binding path works through wgpu-mojo natively. The shadow pass itself (light camera, depth pass, PCF in the mesh fragment shader) is not built yet; this is the riskiest unknown, now resolved.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
