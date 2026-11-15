@@ -62,6 +62,10 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
 
 Source contrast (luminance std-dev of the 1024 px JPEG resized to 256 px): rock 29.9, concrete wall 2.6. The concrete source is almost flat, so the flat walls come from the asset. The rock source has high contrast, so the low rendered ground contrast (10.25) comes from the render path (triplanar scale, lighting, mips). Next: pick a higher-contrast CC0 wall texture (manifest change); sweep the triplanar scale in the engine for the ground.
 
+## Triplanar scale sweep (step 5)
+
+`scripts/triplanar_sweep.py` rebuilt the page at three triplanar scales (per metre) and measured the hub ground crop: 0.125 gives std-dev 10.58, 0.5 gives 10.58, 1.0 gives 10.48; the pinned 0.25 gives 10.25. The scale changes the pixels, but barely changes the floor's contrast, so the scale does not explain the flat ground. Next candidate: the lighting or tint applied to the ground colour (engine shading), checked by a sweep of the ground's colour multiplier. Nothing engine-side was committed.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
