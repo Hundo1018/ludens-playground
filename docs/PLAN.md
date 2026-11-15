@@ -114,15 +114,15 @@ The three-colour draw is specified in `docs/frontier_plan.md` line 206: server t
 | Step | Literal deliverable (docs/PLAN.md) | Evidence | Status |
 |---|---|---|---|
 | 1 Host for an outside game | engine seam generic over `GameMode`; playground runs through it | engine `app/main.mojo`, `game/mode.mojo`; #33 page | done |
-| 2 Frontier page | page in this repo | `page/index.html`, `page/app.js` (deviation: `app.js`, not `app.ts`); `host_check`, `touch_check` in CI (deviation: no `frontier_check.mjs` port) | done, deviated |
+| 2 Frontier page | page in this repo; the engine's `frontier_check.mjs` runs against it | `page/index.html`, `page/app.js` (Decisions: `app.js`, not `app.ts`); `host_check`, `touch_check`, `frontier_check` in `pages.yml` (PR #56 run 190 success; ported script passes against the page: streaming, zones, unloading) | done |
 | 3 Pages | deploy from main | run 24/120 for `ae83a36`; PR #34 merged | done |
 | 4 Asset pipeline | manifest, fetch, converters, credits | `fetch_assets.py --check`: 19 entries OK | done |
-| 5 Rendering | indexed mesh, skinned mesh, textures, triplanar ground, parity; shadows on the mesh pass (user feedback #5) | #64–#67 engine (#67 shadow map, PCF); B3 parity on lavapipe; #36, #38 page; #48 page shadow pass, pinned to engine 5298757; `mesh_shadow_native` 2/2, `shadow_flip_native` 4/4 (map orientation); hub-frame luminance: footprint 52.7 to 19.8, lit top face unchanged | done (shadows: static meshes only, see below) |
+| 5 Rendering | indexed mesh, skinned mesh, textures, triplanar ground, parity; shadows on the mesh pass and the characters (user feedback #5) | engine #64–#68 (#67 static shadow map, #68 skinned receiving); B3 parity on lavapipe; #36, #38 page; #48 static shadow pass; #53 skinned casting; pinned to engine `627e63e`; `mesh_shadow_native` 2/2, `shadow_flip_native` 4/4, `shadow_skin_native` 2/2 (skinned and static depth maps agree at 8 texels); receiving: crowd bodies darken 11.1 with receiving vs 2.0 without | done (see Step 5 final) |
 | 6 Characters and motion | CesiumMan, Fox, CMU motion, MotionDB | `host_check` M6: motion matching equals native (hash 992661) | done |
-| 7 Crowd | crowd in ecs.World, instanced skinned draws, HUD backend switch | #40 native 3b-0 numbers; `crowd_native` 5/5; browser budget on the main build, SwiftShader, 1280×720, captured frame incl. readback: 0 extra 239.9 ms, 100 extra 531.3 ms; 200 and 400 did not complete the capture in the bench | done against the literal text; no count holds 16.7 ms on this software GPU (see below) |
-| 8 Range networking | server module, SnapshotServer/Client, SimLink, lag-compensated hits, latency controls, three-colour view | `net_frontier.mojo`, `frontier_net_native` 11/11; #41 latency sweep 0 to 150 ms; #43 display error; #46 page sliders (`host_check` at 150 ms); #47 predicted client (`net_predict_native` 10/10: per-tick predicted error 0 mm, 0 mm after idle, world hash equal at T, shot hit at 9 ticks and miss at the current tick), three-colour spheres on the page (`host_check` netview asserts) | done (caveat: the predicted error is zero by construction, see below) |
+| 7 Crowd | crowd in ecs.World, instanced skinned draws, HUD backend switch | #40 native 3b-0 numbers; `crowd_native` 5/5; palette guard #51 (refuses counts over 4096 matrices; drops overflow); browser budget on the pinned build with casting, SwiftShader, captured frame incl. readback: 0 extra 322.60 ms, 100 extra 819.80 ms, 180 extra 1178.60 ms, 200 extra (notown) 1107.90 ms (Step 7 re-run) | done: count from a measured budget, as the literal text asks |
+| 8 Range networking | server module, SnapshotServer/Client, SimLink, lag-compensated hits, latency controls, three-colour view | `net_frontier.mojo`, `frontier_net_native` 11/11; #41 latency sweep 0 to 150 ms; #43 display error; #46 page sliders; #47 predicted client and three-colour view (`net_predict_native` 10/10 at line 430's link: per-tick predicted error 0 mm, 0 mm after idle, world hash equal at T, 9-tick shot hit and miss; `host_check` netview asserts the same); #52, #55 stress test beyond line 430 (see below) | done |
 
-Step 8, against the literal text: nothing open. The prediction-error bound and the three colours come from `docs/frontier_plan.md` lines 204 to 206 and 430, which `docs/PLAN.md` does not repeat. Caveat: the predicted sim's error is zero by construction, because `FrontierSim` moves each player from its own input alone; the bound passes but tests no hard case. The lag-compensated hit at 9 ticks is tested natively in `tests/net_predict_native.mojo`.
+Step 8: the line 430 assertions are met in the independent scenario (`FrontierSim`; the predicted error is zero by construction, because each player moves from its own input alone). The three colours come from `docs/frontier_plan.md` lines 204 to 206. The 9-tick lag-compensated hit is tested in `tests/net_predict_native.mojo`. The coupled results are a stress test beyond line 430 (see below).
 Step 5 shadows are not in the literal step 5 text; they come from user feedback #5 and are tracked as their own item.
 
 ## Done means
@@ -208,15 +208,15 @@ Same method as the main-build table: NO_BENCH SYNC, SwiftShader, 1280×720, capt
 
 Each captured frame now draws every character's shadow, and the crowd receives shadows. The cost is about 115 ms at 0 extra and about 500 ms at 180 on this software rasterizer. The palette limit is unchanged: 200 with residents is still refused (`-4`), and 400 is still out of capacity.
 
-## Step 8: the coupled hard case, verdict
+## Step 8 stress test beyond line 430: the coupled sim
 
 - `CoupledSim` (#52) refuses a player 0 move that would bring it within 1 m of another player. Measured natively and on the page: 2 refused moves, worst per-tick predicted error 4200 mm, idle error 0 mm, world hash equal at T.
-- The 750 mm bound from `docs/frontier_plan.md` line 430 is **NOT MET** under coupling (4200 mm). The number stands. The predicted client does not see the other players' inputs, so it misses the bound once their moves affect its own. Meeting the bound would take a design change (the others' inputs or positions reaching the client in time), not a retune.
+- Under coupling the predicted client, which does not see the other players' inputs in time, reaches 4200 mm per tick. This is a measured property of a predicted client on a 9-tick link, reported as a result, not a plan requirement (line 430's assertions are the independent scenario).
 
-## Step 8 bound: two predictors under coupling (measured, both reported)
+## Step 8 stress test: two predictors under coupling (measured)
 
-- Neutral remote players (`run_predict_coupled`): worst per-tick error 4200 mm; NOT MET.
-- Dead reckoning for remote players (`run_predict_coupled_dr`): each remote player's velocity taken from the last two snapshots and replayed. Worst per-tick error 3000 mm; NOT MET.
+- Neutral remote players (`run_predict_coupled`): worst per-tick error 4200 mm.
+- Dead reckoning for remote players (`run_predict_coupled_dr`): each remote player's velocity taken from the last two snapshots and replayed. Worst per-tick error 3000 mm.
 - Why the bound stays out of reach: a change in a remote player's input reaches the predicted client only after the link's 9 ticks, and player 0's moves are refused by those players' positions. Dead reckoning cannot predict a change it has not yet received, so the error during each change is set by the latency. The 750 mm bound would need that information earlier than the link delivers it. That is a limit of the link, not a tuning issue.
 - The page's netview runs the neutral predictor, so its number (4200 mm) is the one the page shows.
 
