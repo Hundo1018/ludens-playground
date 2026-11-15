@@ -56,7 +56,7 @@ def main() raises:
         Float32(0.0), Float32(0.0), Float32(0.5), Float32(1.0),
     ]
     var shadow = ShadowPass(device, WGPUTextureFormat.Depth32Float)
-    shadow.draw(device, items, registry, vp, depth_view^)
+    shadow.draw(device, items, registry, vp, depth_view^, List[Float32]())
     var out = device.create_buffer(UInt64(16), WGPUBufferUsage.STORAGE | WGPUBufferUsage.COPY_SRC, label="flip_out")
     var readback = device.create_buffer(UInt64(16), WGPUBufferUsage.MAP_READ | WGPUBufferUsage.COPY_DST, label="flip_map")
     var entries: List[WGPUBindGroupLayoutEntry] = [

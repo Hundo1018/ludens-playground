@@ -244,7 +244,12 @@ struct Host(Movable):
             if not self.shadow:
                 self.shadow = ShadowPass(self.boot.device(), WGPUTextureFormat.Depth32Float)
             var sview = self.renderer.value().mesh.shadow_tex.create_view_default()
-            self.shadow.value().draw(self.boot.device(), shadow_items, self.renderer.value().meshes, light, sview^)
+            # the characters, the crowd and the town cast too: their skinned items, and the palette the skin pass reads this frame
+            for it in self.renderer.value().items:
+                if it.pose_id >= 0 and it.mesh_id >= 0:
+                    shadow_items.append(it.copy())
+            var pal = self.renderer.value().skin_palette.copy()
+            self.shadow.value().draw(self.boot.device(), shadow_items, self.renderer.value().meshes, light, sview^, pal)
         self.renderer.value().draw(self.boot.device(), target, self.width, self.height, self.hud.value())
         self.world = m^
 
