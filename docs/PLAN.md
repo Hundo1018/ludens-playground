@@ -56,6 +56,12 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
 8. **Range networking (5).** Authoritative server in a second module, `SnapshotServer` / `SnapshotClient`, `SimLink`
    latency controls, lag-compensated hits. Reuses the engine's `gameplay/netcode`.
 
+## Texture measurement (step 5, hub frame, `?offscreen` on and `?offscreen&notex` off)
+
+`scripts/texture_compare.py` on the two captures: ground crop (500,380)-(940,470) std-dev 10.25 with the rock texture, 10.50 without (mean -0.65): the texture lowers the floor's contrast. 3.32% of the frame differs by more than 3 luminance levels, spread over the floor and the characters. The wall crop is identical on and off because `?notex` switches off only the ground and Fox textures; the concrete wall is textured in both runs, so this comparison does not measure walls. Next: a wall switch, then the triplanar scale sweep in the engine.
+
+Source contrast (luminance std-dev of the 1024 px JPEG resized to 256 px): rock 29.9, concrete wall 2.6. The concrete source is almost flat, so the flat walls come from the asset. The rock source has high contrast, so the low rendered ground contrast (10.25) comes from the render path (triplanar scale, lighting, mips). Next: pick a higher-contrast CC0 wall texture (manifest change); sweep the triplanar scale in the engine for the ground.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
