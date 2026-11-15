@@ -227,6 +227,17 @@ need(usedOn <= 4096, `crowd guard: the palette stays within its 4096 matrices wi
 const culled = await js('window.host.x.playground_host_crowd_culled(window.host.app)');
 need(culled > 0, `crowd guard: members outside the view are culled and not skinned (${culled} counted)`);
 console.log(`crowd guard: drop path not reached from this view (dropped ${dropAfter - dropBase}); LOD culled ${culled}`);
+// The palette-drop path, with the LOD off (every member fills the palette, from any camera): 213 members with the town on
+// must drop members, and the drop is counted. Restores the LOD after.
+await js('window.host.x.playground_host_crowd_lod(window.host.app, 0)');
+await js('window.host.x.playground_host_crowd(window.host.app, 0)');
+await js('window.host.x.playground_host_town(window.host.app, 0)');
+need((await js('window.host.x.playground_host_crowd(window.host.app, 213)')) === 213, 'crowd guard (LOD off): 213 members accepted with the town off');
+await js('window.host.x.playground_host_town(window.host.app, 1)');
+need(await drawOnce(), 'crowd guard (LOD off): a frame with the town on is drawn');
+const dropLod = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
+need(dropLod > dropBase, `crowd guard (LOD off): members past the palette are dropped and counted (${dropLod - dropBase})`);
+await js('window.host.x.playground_host_crowd_lod(window.host.app, 1)');
 await js('window.host.x.playground_host_crowd(window.host.app, 0)');
 console.log(problems.length ? `host-check: FAIL\n  ${problems.join('\n  ')}` : 'host-check: PASS');
 done(problems.length ? 1 : 0);
