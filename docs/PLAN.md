@@ -24,8 +24,15 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
   (playground #3, merged). Native and wasm agree (`scripts/check_parity.sh`).
 - Touch: the engine's virtual pad (`vpad.ts`, `vpad_view.ts`) is mounted on the page; its stick and buttons reach the
   host as W A S D, Space and R (`scripts/touch_check.mjs`, three runs in CI).
-- Open: the Frontier **page** here (today it exists only in the engine, which still serves `?frontier`); engine #59 removes
-  that copy and must not merge before the page exists here.
+- Page: the Frontier page is here (`page/index.html`, `page/app.js`, not the `index.html` / `app.ts` the earlier draft named).
+  Pages deploys it from main (`pages build and deployment` run 24 for `ae83a36`: success). CI run 120 for `ae83a36` is the
+  check that gates the rest.
+- Ordering gap: engine #59 (removes the engine's `?frontier` page) merged on 2026-11-14 at 06:46 UTC. The first playground
+  page build was on 2026-11-15 at 07:31 UTC. The rule "merge #59 only after the page exists here" was not followed; for
+  about a day the engine served no Frontier page. This cannot be undone and is recorded here.
+- Step status (evidence): 1 engine seam is generic (`app/main.mojo` and `game/mode.mojo` use `M: GameMode`; playground
+  `frontier` runs through it). 4 asset pipeline: `python3 scripts/fetch_assets.py --check` reports 19 manifest entries
+  consistent with credits (run in CI). 5, 7, 8 and stage 2: not started.
 
 ## Steps, in order
 
@@ -48,6 +55,12 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
    backends. Count from a measured budget, not a promise.
 8. **Range networking (5).** Authoritative server in a second module, `SnapshotServer` / `SnapshotClient`, `SimLink`
    latency controls, lag-compensated hits. Reuses the engine's `gameplay/netcode`.
+
+## Texture measurement (step 5, hub frame, `?offscreen` on and `?offscreen&notex` off)
+
+`scripts/texture_compare.py` on the two captures: ground crop (500,380)-(940,470) std-dev 10.25 with the rock texture, 10.50 without (mean -0.65): the texture lowers the floor's contrast. 3.32% of the frame differs by more than 3 luminance levels, spread over the floor and the characters. The wall crop is identical on and off because `?notex` switches off only the ground and Fox textures; the concrete wall is textured in both runs, so this comparison does not measure walls. Next: a wall switch, then the triplanar scale sweep in the engine.
+
+Source contrast (luminance std-dev of the 1024 px JPEG resized to 256 px): rock 29.9, concrete wall 2.6. The concrete source is almost flat, so the flat walls come from the asset. The rock source has high contrast, so the low rendered ground contrast (10.25) comes from the render path (triplanar scale, lighting, mips). Next: pick a higher-contrast CC0 wall texture (manifest change); sweep the triplanar scale in the engine for the ground.
 
 ## Wall texture (step 5)
 
