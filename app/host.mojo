@@ -19,7 +19,8 @@ from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
 from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame
 from motion_match import build_match, m6_hash
-from net_frontier import run_session
+from net_frontier import run_session, script, NP, FrontierSim
+from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow
 from town import Town, RESIDENTS
 from geometry.mat import Mat4, transform_point4
@@ -676,6 +677,87 @@ def playground_host_net_check(latency: Int32, jitter: Int32, loss_permille: Int3
         print("playground_host_net_check:", e)
         return -2
 
+
+# Step 8, second module: the page's clients. Each client is a SnapshotClient over the Frontier's sim; the bytes it sends
+# and receives go through the server module (app/server_host.mojo) in a Worker, with the link delay applied on the page.
+comptime CLIENT_MODULUS = UInt64(1000000007)
+
+
+struct ClientPeer(Movable):
+    var c: SnapshotClient[FrontierSim]
+    var node: Int
+    var out: List[UInt8]
+
+    def __init__(out self, node: Int):
+        self.c = SnapshotClient[FrontierSim](FrontierSim(NP), node)
+        self.node = node
+        self.out = List[UInt8]()
+
+
+def _peer(handle: UInt64) -> Pointer[ClientPeer, MutUntrackedOrigin]:
+    return Pointer[ClientPeer, MutUntrackedOrigin](unsafe_from_address=Int(handle))
+
+
+@export
+def playground_host_client_new(node: Int32) abi("C") -> UInt64:
+    """A client for node `node` (0 .. NP-1). 0 if the node is out of range."""
+    if node < 0 or node >= Int32(NP):
+        return 0
+    var p = raw_alloc[ClientPeer](1)
+    p.unsafe_write(ClientPeer(Int(node)))
+    return UInt64(Int(p))
+
+
+@export
+def playground_host_client_submit(handle: UInt64, f: Int32, total: Int32) abi("C") -> Int32:
+    """The client's input for tick `f`, if it has not yet reached `total` (as run_session does). 0."""
+    var s = _peer(handle)
+    if s[].c.newest < Int(total):
+        s[].c.submit(script(s[].node, Int(f)))
+    return 0
+
+
+@export
+def playground_host_client_outgoing(handle: UInt64, to_node: Int32) abi("C") -> Int32:
+    """The bytes for node `to_node` (read them with playground_host_client_out_ptr). Returns the length."""
+    var s = _peer(handle)
+    var m = s[].c.outgoing(Int(to_node))
+    s[].out = m^
+    return Int32(len(s[].out))
+
+
+@export
+def playground_host_client_out_ptr(handle: UInt64) abi("C") -> UInt64:
+    var s = _peer(handle)
+    return UInt64(Int(s[].out.unsafe_ptr()))
+
+
+@export
+def playground_host_client_receive(handle: UInt64, from_node: Int32, ptr: UInt64, length: Int32) abi("C") -> Int32:
+    """A message from node `from_node`: `length` bytes at `ptr` in this module's memory. 0, or -1 if it was refused."""
+    var s = _peer(handle)
+    var msg = List[UInt8]()
+    var src = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(ptr))
+    for k in range(Int(length)):
+        msg.append(src[k])
+    try:
+        s[].c.receive(Int(from_node), msg)
+        return 0
+    except e:
+        print("playground_host_client_receive:", e)
+        return -1
+
+
+@export
+def playground_host_client_newest(handle: UInt64) abi("C") -> Int32:
+    """The newest tick this client has a snapshot for."""
+    return Int32(_peer(handle)[].c.newest)
+
+
+@export
+def playground_host_client_hash(handle: UInt64) abi("C") -> Int32:
+    """The client's world hash, mod 1000000007 (the number playground_host_net_check returns)."""
+    return Int32(Int(_peer(handle)[].c.world_hash() % CLIENT_MODULUS))
 
 @export
 def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
