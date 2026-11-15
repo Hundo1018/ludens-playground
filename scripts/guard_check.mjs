@@ -1,7 +1,7 @@
 // W6 guard rule in the browser: a player placed in the town square, a few metres from the guard, is touched by it once,
 // is sent back to the hub (the player at the origin), and is not touched again while it stays there.
 // usage: node scripts/guard_check.mjs <chrome> <url> [timeout_s=300]
-// The page is not offscreen: the town and its guard step in the draw path, which the offscreen capture skips.
+// The town steps with the simulation (frame), so the page could also be offscreen; this check keeps the canvas path.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
