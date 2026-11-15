@@ -38,7 +38,7 @@ async function loadAssets(rt, x, app) {
 // GLFW codes for the keys the Frontier uses (the same numbers the engine's keys table gives).
 const KEYS = { KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68, Space: 32, KeyP: 80, KeyR: 82, Escape: 256,
                ArrowRight: 262, ArrowLeft: 263, ArrowDown: 264, ArrowUp: 265 };
-const EV_KEY = 1, ACTION_RELEASE = 0, ACTION_PRESS = 1, ACTION_REPEAT = 2;
+const EV_KEY = 1, EV_MOUSE_BUTTON = 2, EV_CURSOR_POS = 3, ACTION_RELEASE = 0, ACTION_PRESS = 1, ACTION_REPEAT = 2;
 
 async function boot() {
   const [layout, enums, bytes] = await Promise.all([
@@ -65,8 +65,39 @@ async function boot() {
     ],
   };
   const padKey = (code, down) => { (stats.padLog ||= []).push([code, down]); return x.playground_host_input(app, EV_KEY, code, down ? ACTION_PRESS : ACTION_RELEASE, 0, 0, 0); };
+  // Camera look (W1): the engine's own forwarding (shell/web/app.ts). The pointer sends button and cursor events; a pad
+  // look is a drag of a virtual cursor with the left button held, so the game reads it as a mouse drag.
+  const send = (kind, key, action, mods, x0, y0) => x.playground_host_input(app, kind, key, action, mods, x0, y0);
+  const BUTTON_LEFT = 0, BUTTON_RIGHT = 1, BUTTON_MIDDLE = 2;
+  const DOM_TO_GLFW = [BUTTON_LEFT, BUTTON_MIDDLE, BUTTON_RIGHT]; // DOM button 0/1/2 = left/middle/right
+  let vx = 0, vy = 0, turning = false;
+  const padLook = (dx, dy) => {
+    if (!turning) { turning = true; send(EV_MOUSE_BUTTON, BUTTON_LEFT, ACTION_PRESS, 0, vx, vy); }
+    vx += dx; vy += dy;
+    send(EV_CURSOR_POS, 0, 0, 0, vx, vy);
+  };
+  const padLookEnd = () => { if (turning) { turning = false; send(EV_MOUSE_BUTTON, BUTTON_LEFT, ACTION_RELEASE, 0, vx, vy); } };
+  canvas.style.touchAction = "none"; // a drag on the canvas is input, not a page scroll
+  const isTouch = (e) => e.pointerType === "touch"; // touch goes to the virtual pad
+  canvas.addEventListener("pointermove", (e) => {
+    if (isTouch(e)) return;
+    vx = e.offsetX; vy = e.offsetY;
+    send(EV_CURSOR_POS, 0, 0, 0, e.offsetX, e.offsetY);
+  });
+  canvas.addEventListener("pointerdown", (e) => {
+    if (isTouch(e)) return;
+    send(EV_CURSOR_POS, 0, 0, 0, e.offsetX, e.offsetY); // the press point is where the cursor is: no jump into the drag
+    vx = e.offsetX; vy = e.offsetY;
+    send(EV_MOUSE_BUTTON, DOM_TO_GLFW[e.button] ?? 0, ACTION_PRESS, 0, e.offsetX, e.offsetY);
+  });
+  const pointerUp = (e) => {
+    if (isTouch(e)) return;
+    send(EV_MOUSE_BUTTON, DOM_TO_GLFW[e.button] ?? 0, ACTION_RELEASE, 0, e.offsetX, e.offsetY);
+  };
+  canvas.addEventListener("pointerup", pointerUp);
+  canvas.addEventListener("pointercancel", pointerUp);
   // The pad shows itself on a coarse pointer (a phone); ?pad forces it on, for the headless touch check.
-  stats.pad = mountVirtualPad(canvas, PAD, { key: padKey, look() {}, lookEnd() {} }, params.has("pad"));
+  stats.pad = mountVirtualPad(canvas, PAD, { key: padKey, look: padLook, lookEnd: padLookEnd }, params.has("pad"));
   loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
   // The town (plan stage 3): 24 residents on corner routes and a guard; ?notown leaves it out.
