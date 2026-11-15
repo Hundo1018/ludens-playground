@@ -125,6 +125,9 @@ struct Host(Movable):
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
     var palette_dropped: Int  # skinned members that did not fit PALETTE_MATRICES, counted since the page started
+    var tier_near: Int  # crowd members drawn in the near tier last frame (reference baseline A)
+    var tier_mid: Int
+    var tier_far: Int
     var crowd_culled: Int  # W11: crowd members outside the view, not skinned, counted since the page started
     var crowd_lod: Bool  # W11: the far-member LOD is on (default); playground_host_crowd_lod(app, 0) turns it off for the palette-drop check
     var palette_used: Int  # matrices in the last frame's skinned palette
@@ -185,6 +188,9 @@ struct Host(Movable):
         self.tex_job = None
         self.b3_job = None
         self.palette_dropped = 0
+        self.tier_near = 0
+        self.tier_mid = 0
+        self.tier_far = 0
         self.crowd_culled = 0
         self.crowd_lod = True
         self.palette_used = 0
@@ -249,6 +255,9 @@ struct Host(Movable):
         self.ao_done = move.ao_done
         self.b3_job = move.b3_job^
         self.palette_dropped = move.palette_dropped
+        self.tier_near = move.tier_near
+        self.tier_mid = move.tier_mid
+        self.tier_far = move.tier_far
         self.crowd_culled = move.crowd_culled
         self.crowd_lod = move.crowd_lod
         self.palette_used = move.palette_used
@@ -388,10 +397,15 @@ struct Host(Movable):
                 cs.step(Real(1.0 / 60.0))
                 crowd_rows = cs.positions()
                 self.crowd = cs^
-            # the palette holds PALETTE_MATRICES matrices. A member that would not fit is dropped with the rest after
-            # it (the newest entries), and the count is kept in palette_dropped: the frame still draws.
-            # W11 far-member LOD: a member outside the view (with a 20 % margin, so none pops at the edge) gets no palette
-            # and no draw; its row is still stepped (by the worker or the page). Counted in crowd_culled.
+            # Tiers (reference baseline A, after AC Unity's crowd: 40 full AIs, 120 high-res models, the rest low-res). The
+            # visible members are ordered by whole metres to the eye (a counting sort over HIST_BINS one-metre bins, O(n)).
+            # The nearest NEAR_TIER and the next MID_TIER get their own pose at their own clip phase; the rest are far and
+            # share one table of TABLE_FRAMES poses of the walk clip (slot = clip offset mod TABLE_FRAMES), so the palette
+            # does not grow with the crowd. A near or mid member that would not fit the palette is dropped with the rest
+            # after it and counted in palette_dropped.
+            # W11 LOD: a member outside the view (20 % margin) gets no pose and no draw; its row is still stepped.
+            var vis = List[Int]()
+            var dist = List[Int]()
             for k in range(len(crowd_rows)):
                 var inside = True
                 if self.crowd_lod:
@@ -400,13 +414,54 @@ struct Host(Movable):
                 if not inside:
                     self.crowd_culled += 1
                     continue
-                if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
-                    self.palette_dropped += len(crowd_rows) - k
-                    break
-                var fr = (Int(self.clock * Float64(c.fps)) + crowd_rows[k].offset) % c.frames
-                crowd_bases.append(len(pal) // 16)
-                crowd_idx.append(k)
-                pal.extend(pose_palette_frame(c, fr))
+                var dx = Float64(crowd_rows[k].x) - Float64(view.eye[0])
+                var dz = Float64(crowd_rows[k].z) - Float64(view.eye[2])
+                vis.append(k)
+                dist.append(min(Int((dx * dx + dz * dz) ** 0.5), HIST_BINS - 1))
+            var start = List[Int]()
+            for _ in range(HIST_BINS + 1):
+                start.append(0)
+            for d in dist:
+                start[d + 1] += 1
+            for b in range(HIST_BINS):
+                start[b + 1] += start[b]
+            var order = List[Int]()
+            for _ in range(len(vis)):
+                order.append(0)
+            for i in range(len(vis)):
+                order[start[dist[i]]] = vis[i]
+                start[dist[i]] += 1
+            self.tier_near = 0
+            self.tier_mid = 0
+            self.tier_far = 0
+            var table_base = -1
+            for j in range(len(order)):
+                var k = order[j]
+                if j < NEAR_TIER + MID_TIER:
+                    if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
+                        self.palette_dropped += len(order) - j
+                        break
+                    var fr = (Int(self.clock * Float64(c.fps)) + crowd_rows[k].offset) % c.frames
+                    crowd_bases.append(len(pal) // 16)
+                    crowd_idx.append(k)
+                    pal.extend(pose_palette_frame(c, fr))
+                    if j < NEAR_TIER:
+                        self.tier_near += 1
+                    else:
+                        self.tier_mid += 1
+                else:
+                    if table_base < 0:
+                        if len(pal) // 16 + TABLE_FRAMES * c.joint_count > PALETTE_MATRICES:
+                            self.palette_dropped += len(order) - j
+                            break
+                        table_base = len(pal) // 16
+                        var now = Int(self.clock * Float64(c.fps))
+                        for tf in range(TABLE_FRAMES):
+                            pal.extend(pose_palette_frame(c, (now + tf * c.frames // TABLE_FRAMES) % c.frames))
+                    var slot = ((crowd_rows[k].offset % TABLE_FRAMES) + TABLE_FRAMES) % TABLE_FRAMES
+                    crowd_bases.append(table_base + slot * c.joint_count)
+                    crowd_idx.append(k)
+                    self.tier_far += 1
         # the town (plan stage 3): 24 residents and the guard, each a CesiumMan at its ORCA position, its clip phase spread
         var town_rows = List[Vec3]()
         var town_bases = List[Int]()
@@ -558,6 +613,10 @@ struct Host(Movable):
 
 # the skinned palette holds this many matrices (the engine's limit); a member takes one matrix per joint
 comptime PALETTE_MATRICES = 4096
+comptime NEAR_TIER = 40  # crowd tiers (reference baseline A): own pose, nearest
+comptime MID_TIER = 120  # own pose, next nearest
+comptime TABLE_FRAMES = 16  # far members share this many poses of the walk clip
+comptime HIST_BINS = 64  # one-metre distance bins for the tier ordering; farther than 63 m falls in the last
 
 
 def _host(handle: UInt64) -> Pointer[Host, MutUntrackedOrigin]:
@@ -898,7 +957,7 @@ def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
     the assets are up). A member that does not fit when the town is switched on after the crowd is dropped and counted
     in playground_host_palette_dropped."""
     var h = _host(app)
-    if n < 0 or n > 400:
+    if n < 0 or n > 4096:
         return -1
     if n == 0:
         h[].crowd = None
@@ -909,7 +968,7 @@ def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
         var residents = 0
         if h[].town:
             residents = len(h[].town.value().crowd.pos)
-        var need = fixed + (residents + Int(n)) * per
+        var need = fixed + (residents + min(Int(n), NEAR_TIER + MID_TIER)) * per + TABLE_FRAMES * per  # far members share the table
         if need > PALETTE_MATRICES:
             return -4
     try:
@@ -918,6 +977,19 @@ def playground_host_crowd(app: UInt64, n: Int32) abi("C") -> Int32:
     except e:
         print("playground_host_crowd:", e)
         return -2
+
+
+@export
+def playground_host_crowd_tiers(app: UInt64, which: Int32) abi("C") -> Int32:
+    """Reference baseline A: crowd members drawn last frame in tier which (0 near, 1 mid, 2 far). -1 for another which."""
+    var h = _host(app)
+    if which == 0:
+        return Int32(h[].tier_near)
+    if which == 1:
+        return Int32(h[].tier_mid)
+    if which == 2:
+        return Int32(h[].tier_far)
+    return -1
 
 
 @export
