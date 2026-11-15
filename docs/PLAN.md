@@ -120,9 +120,9 @@ The three-colour draw is specified in `docs/frontier_plan.md` line 206: server t
 | 5 Rendering | indexed mesh, skinned mesh, textures, triplanar ground, parity | #64–#66 engine; B3 parity on lavapipe; #36, #38 page | done |
 | 6 Characters and motion | CesiumMan, Fox, CMU motion, MotionDB | `host_check` M6: motion matching equals native (hash 992661) | done |
 | 7 Crowd | crowd in ecs.World, instanced skinned draws, HUD backend switch | #40 native 3b-0 numbers; `crowd_native` 5/5; browser SYNC timings environment-limited | native done; browser environment-limited |
-| 8 Range networking | server module, SnapshotServer/Client, SimLink, lag-compensated hits | `net_frontier.mojo`, `frontier_net_native` 11/11; #41 latency sweep (convergence 0–150 ms); #43 display error | partly done; see below |
+| 8 Range networking | server module, SnapshotServer/Client, SimLink, lag-compensated hits, latency controls, three-colour view | `net_frontier.mojo`, `frontier_net_native` 11/11; #41 latency sweep 0 to 150 ms; #43 display error; #46 page sliders (`host_check` at 150 ms); #47 predicted client (`net_predict_native` 10/10: per-tick predicted error 0 mm, 0 mm after idle, world hash equal at T, shot hit at 9 ticks and miss at the current tick), three-colour spheres on the page (`host_check` netview asserts) | done (caveat: the predicted error is zero by construction, see below) |
 
-Step 8, still open against the literal text: the SimLink latency controls on the page (no user-set latency yet), the prediction-error bound (not in `docs/PLAN.md`; decide whether it applies), and a two-colour draw of server and client-shown state.
+Step 8, against the literal text: nothing open. The prediction-error bound and the three colours come from `docs/frontier_plan.md` lines 204 to 206 and 430, which `docs/PLAN.md` does not repeat. Caveat: the predicted sim's error is zero by construction, because `FrontierSim` moves each player from its own input alone; the bound passes but tests no hard case. The lag-compensated hit at 9 ticks is tested natively in `tests/net_predict_native.mojo`.
 Step 5 shadows are not in the literal step 5 text; they come from user feedback #5 and are tracked as their own item.
 
 ## Done means
