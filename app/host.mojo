@@ -21,7 +21,7 @@ from frontier_assets import Character, parse_character, parse_ltexture, pose_pal
 from motion_match import build_match, m6_hash
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
-from crowd import CrowdState, CrowdRow
+from crowd import CrowdState, CrowdRow, positions_hash
 from town import Town, RESIDENTS
 from geometry.mat import Mat4, transform_point4
 from game.arena import DrawItem
@@ -1132,3 +1132,45 @@ def playground_host_protagonist(app: UInt64, which: Int32) abi("C") -> Float64:
     if len(h[].prot) != 6 or which < 0 or which > 5:
         return 0.0
     return h[].prot[Int(which)]
+
+
+@export
+def playground_host_crowd_hash_after(app: UInt64, n: Int32, ticks: Int32) abi("C") -> Int32:
+    """W11 parity: a fresh crowd of n members on the hub's pillars, stepped `ticks` times at 1/60 s, hashed with
+    positions_hash. The worker runs the same steps; equal hashes are the check. -1 if there is no Frontier world yet."""
+    var h = _host(app)
+    if not h[].world:
+        return -1
+    try:
+        var boxes = h[].world.value().world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0)
+        var cs = CrowdState(Int(n), boxes)
+        for _ in range(Int(ticks)):
+            cs.step(Real(1.0 / 60.0))
+        return Int32(positions_hash(cs.positions()))
+    except e:
+        print("playground_host_crowd_hash_after:", e)
+        return -2
+
+
+@export
+def playground_host_pillar_count(app: UInt64) abi("C") -> Int32:
+    """W11: the hub's pillar boxes that the crowd's floor uses (static_boxes over -20..20 m, half height over 1 m)."""
+    var h = _host(app)
+    if not h[].world:
+        return -1
+    return Int32(len(h[].world.value().world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0)))
+
+
+@export
+def playground_host_pillar(app: UInt64, i: Int32, k: Int32) abi("C") -> Float64:
+    """Value k (0..5: centre x, y, z, then half x, y, z) of pillar box i. 0 when out of range."""
+    var h = _host(app)
+    if not h[].world:
+        return 0.0
+    var boxes = h[].world.value().world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0)
+    if i < 0 or Int(i) >= len(boxes) or k < 0 or k > 5:
+        return 0.0
+    var b = boxes[Int(i)]
+    if k < 3:
+        return Float64(b.c[Int(k)])
+    return Float64(b.h[Int(k) - 3])

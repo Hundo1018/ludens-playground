@@ -117,6 +117,21 @@ def rows[Bk: StorageBackend](w: World[Bk]) -> List[CrowdRow]:
     return out^
 
 
+def positions_hash(rows: List[CrowdRow]) -> UInt64:
+    """A hash of the members' positions (quantised to mm), offsets, in the order given. W11: the worker and the page
+    compute it the same way, so equal hashes mean equal crowds."""
+    var acc = UInt64(0)
+    for r in rows:
+        var x = Float64(r.x)
+        var z = Float64(r.z)
+        var xi = Int(x * 1000.0 + 0.5) if x >= 0 else Int(x * 1000.0 - 0.5)
+        var zi = Int(z * 1000.0 + 0.5) if z >= 0 else Int(z * 1000.0 - 0.5)
+        acc = (acc * UInt64(1000003) + UInt64(xi + 1000000)) % UInt64(1000000007)
+        acc = (acc * UInt64(1000003) + UInt64(zi + 1000000)) % UInt64(1000000007)
+        acc = (acc * UInt64(1000003) + UInt64(r.offset)) % UInt64(1000000007)
+    return acc
+
+
 def _rebuild[Bk: StorageBackend](mut w: World[Bk], src: List[CrowdRow]):
     for r in src:
         var e = w.spawn()
