@@ -200,44 +200,27 @@ const drawOnce = () => js(`(async () => {
   if (ok) x.playground_host_capture_release(app);
   return ok;
 })()`);
-const guardRefuse = await js('window.host.x.playground_host_crowd(window.host.app, 200)');
-need(guardRefuse === -4, `crowd guard: 200 members with the residents on are refused (code ${guardRefuse})`);
-const guardFit = await js('window.host.x.playground_host_crowd(window.host.app, 180)');
-need(guardFit === 180, `crowd guard: 180 members with the residents on are accepted (code ${guardFit})`);
-need(await drawOnce(), 'crowd guard: a frame with 180 members is drawn');
-const usedFit = await js('window.host.x.playground_host_palette_used(window.host.app)');
-const dropFit = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
-need(dropFit === 0, `crowd guard: nothing is dropped at 180 members with the residents on (${dropFit}; palette ${usedFit} matrices)`);
-await js('window.host.x.playground_host_crowd(window.host.app, 0)');
-await js('window.host.x.playground_host_town(window.host.app, 0)');
-need(await drawOnce(), 'crowd guard: a frame with the town off is drawn');
+// Crowd tiers (reference baseline A, after AC Unity: 40 full AIs, 120 high-res models, the rest low-res). With the LOD off
+// every member counts as visible, so 2000 members with the residents on split exactly into 40 near, 120 mid and 1840 far.
+// Far members share one pose table, so the palette stays within 4096 matrices and nothing is dropped.
 const dropBase = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
-need((await js('window.host.x.playground_host_crowd(window.host.app, 213)')) === 213, 'crowd guard: 213 members fit with the town off');
-need(await drawOnce(), 'crowd guard: a frame with 213 members and the town off is drawn');
-const usedOff = await js('window.host.x.playground_host_palette_used(window.host.app)');
-await js('window.host.x.playground_host_town(window.host.app, 1)');
-need(await drawOnce(), 'crowd guard: a frame with the town switched on is drawn');
-const usedOn = await js('window.host.x.playground_host_palette_used(window.host.app)');
-const dropAfter = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
-console.log(`crowd guard: palette ${usedOff} matrices with 213 members and no town; ${usedOn} with the town on; dropped ${dropAfter - dropBase}`);
-// W11 far-member LOD: members outside the view are not skinned, so 213 members from the hub's camera no longer fill the
-// palette and the town-on drop path is not reached from this view. What must hold: the palette never passes its capacity
-// with the town on, and the LOD counter moved (members were culled and not skinned).
-need(usedOn <= 4096, `crowd guard: the palette stays within its 4096 matrices with the town on (${usedOn})`);
-const culled = await js('window.host.x.playground_host_crowd_culled(window.host.app)');
-need(culled > 0, `crowd guard: members outside the view are culled and not skinned (${culled} counted)`);
-console.log(`crowd guard: drop path not reached from this view (dropped ${dropAfter - dropBase}); LOD culled ${culled}`);
-// The palette-drop path, with the LOD off (every member fills the palette, from any camera): 213 members with the town on
-// must drop members, and the drop is counted. Restores the LOD after.
 await js('window.host.x.playground_host_crowd_lod(window.host.app, 0)');
-await js('window.host.x.playground_host_crowd(window.host.app, 0)');
-await js('window.host.x.playground_host_town(window.host.app, 0)');
-need((await js('window.host.x.playground_host_crowd(window.host.app, 213)')) === 213, 'crowd guard (LOD off): 213 members accepted with the town off');
-await js('window.host.x.playground_host_town(window.host.app, 1)');
-need(await drawOnce(), 'crowd guard (LOD off): a frame with the town on is drawn');
-const dropLod = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
-need(dropLod > dropBase, `crowd guard (LOD off): members past the palette are dropped and counted (${dropLod - dropBase})`);
+const big = await js('window.host.x.playground_host_crowd(window.host.app, 2000)');
+need(big === 2000, `crowd tiers: 2000 members accepted with the residents on (code ${big})`);
+need(await drawOnce(), 'crowd tiers: a frame with 2000 members is drawn');
+const tiers = [0, 1, 2].map((w) => js(`window.host.x.playground_host_crowd_tiers(window.host.app, ${w})`));
+const [tn, tm, tf] = await Promise.all(tiers);
+need(tn === 40 && tm === 120 && tf === 1840, `crowd tiers: 40 near, 120 mid, 1840 far (${tn}, ${tm}, ${tf})`);
+const usedTiers = await js('window.host.x.playground_host_palette_used(window.host.app)');
+need(usedTiers <= 4096, `crowd tiers: the palette stays within 4096 matrices with 2000 members and the residents (${usedTiers})`);
+const dropTiers = await js('window.host.x.playground_host_palette_dropped(window.host.app)');
+need(dropTiers === dropBase, `crowd tiers: no member is dropped (${dropTiers - dropBase})`);
+// With the LOD on, members outside the view are culled before the tiers
 await js('window.host.x.playground_host_crowd_lod(window.host.app, 1)');
+need(await drawOnce(), 'crowd tiers: a frame with the LOD on is drawn');
+const culled = await js('window.host.x.playground_host_crowd_culled(window.host.app)');
+need(culled > 0, `crowd tiers: members outside the view are culled (${culled} counted)`);
+console.log(`crowd tiers: palette ${usedTiers} matrices for 2000 members; culled ${culled}`);
 await js('window.host.x.playground_host_crowd(window.host.app, 0)');
 console.log(problems.length ? `host-check: FAIL\n  ${problems.join('\n  ')}` : 'host-check: PASS');
 done(problems.length ? 1 : 0);
