@@ -99,6 +99,10 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 
 `benchmarks/net_latency_150ms.mojo`: one-way latency 0 to 9 ticks (0 to 150 ms at 60 Hz), 10 % loss, jitter 3, three seeds per row. Every latency converged (3 of 3) and matched the reference hash (3 of 3). Mean frames to finish 120 ticks: 126 at 0 ms, 145 at 116 ms, 148 at 150 ms. This measures convergence and state equality, not the prediction error that the plan's bound refers to. That bound is still unmeasured.
 
+## Step 8: the three-colour draw, the spec as written
+
+The plan names a "three-colour draw" in step 8 and defines it nowhere else in `docs/`. Read as the three states a netcode view can show: the server's state, the state the client shows, and a predicted state. `SnapshotClient` shows the last received snapshot and has no predicted state, so the third colour is absent from the playground. The draw of the two available states (server and client-shown) is not built yet. The prediction-error bound is the separate, still-open item.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
