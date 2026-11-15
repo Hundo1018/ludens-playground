@@ -274,6 +274,9 @@ struct Frontier(Movable):
     def player_pos(self) raises -> Vec3:
         return self.world.state(self.player_h).pos
 
+    def player_vel(self) raises -> Vec3:
+        return self.world.state(self.player_h).vel
+
     def zone(self) raises -> Int:
         var p = self.player_pos()
         return zone_of(Float64(p[0]), Float64(p[2]))
@@ -367,10 +370,7 @@ struct Frontier(Movable):
                 culled += 1
                 continue
             out.append(w.copy())
-        # the player: a body and a head
-        var p = self.player_pos()
-        out.append(DrawItem(0, p - Vec3(0.0, 0.1, 0.0, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(0.3, 0.5, 0.3, 0.0), Vec3(0.2, 0.55, 0.95, 0.0)))
-        out.append(DrawItem(1, p + Vec3(0.0, 0.55, 0.0, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(0.28, 0.28, 0.28, 0.0), Vec3(0.25, 0.65, 1.0, 0.0)))
+        # the player is drawn by the host as a skinned character (plan W3), not here
         self.drawn = len(out)
         self.culled = culled
         return out^

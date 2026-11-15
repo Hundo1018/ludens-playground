@@ -67,6 +67,12 @@ jobs:
         run: |
           pixi run --manifest-path engine/pixi.toml -e wasm node scripts/look_check.mjs \
             "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html?offscreen" 240
+      - name: "Protagonist: a skinned Fox at the player's feet, facing its velocity (scripts/protagonist_check.mjs, three runs)"
+        run: |
+          for i in 1 2 3; do
+            pixi run --manifest-path engine/pixi.toml -e wasm node scripts/protagonist_check.mjs \
+              "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html" 240 || exit 1
+          done
       - name: Native and wasm give the same numbers
         run: |
           HOST="$(pixi run --manifest-path engine/pixi.toml -e wasm python3 -c 'import ludens_wasm_rt; print(ludens_wasm_rt.HOST_MJS)')"
