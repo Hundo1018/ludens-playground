@@ -167,7 +167,18 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 ## Step 7 browser budget (main build)
 
 - Build: `main` at #48 (`69f94ac`), engine pin 5298757. Browser: headless Chrome with SwiftShader, 1280×720, `NO_BENCH=1 SYNC=1 node scripts/crowd_bench.mjs`. Each sample is a captured frame, readback included.
-- Results: 0 extra instances 239.9 ms median (p90 290.2); 100 extra 531.3 ms (p90 582.6); about 2.9 ms per extra instance. 200 and 400 did not complete the capture within the bench's wait.
+- Results (12 samples each, median and p90, one captured frame per sample):
+
+  | extra instances | residents (town) | median ms | p90 ms |
+  |---:|---|---:|---:|
+  | 0 | on | 208.50 | 228.20 |
+  | 100 | on | 493.90 | 551.50 |
+  | 180 | on | 675.30 | 725.00 |
+  | 200 | off (`notown`) | 652.70 | 826.10 |
+  | 400 | off (`notown`) | no capture | the palette limit |
+
+- Palette limit: the engine's skinned palette holds 4096 matrices, and each CesiumMan has 19 joints. With the 24 town residents on, 200 extra members need 4256 matrices and the capture never completes. With `notown`, 200 fits. 400 members need 7600 and fail. The earlier 200-instance failure in this section was this limit, not a sampling fault. The page's capacity is about 180 members with residents, or about 215 without.
+- Sample spread between runs of the same count is large on SwiftShader: count 0 measured 239.9 ms in one run and 208.5 ms in another, so compare counts within one run only.
 - Earlier build, net-predict without shadows: 0 extra 173.8 ms; 100 extra 476.8 ms. The shadow pass costs about 66 ms per frame here.
 - Backlog: in bench mode (`bench=1`, every frame drawn) the GPU work queues faster than SwiftShader drains it, so the GPU_SYNC numbers track the submit interval rather than GPU time.
 - Conclusion: no count holds 60 Hz on this software rasterizer. The crowd count comes from the native 3b-0 budget. A hardware-GPU browser budget needs a machine with a GPU.

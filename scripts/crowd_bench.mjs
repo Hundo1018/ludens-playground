@@ -34,7 +34,9 @@ const rows = [];
 let budget = 0;
 for (const n of counts) {
   const mode = process.env.NO_BENCH ? '?offscreen' : '?offscreen&bench=1';
-  await send('Page.navigate', { url: `${base}${mode}&w=1280&h=720&crowd=${n}` });
+  // EXTRA=notown leaves the town's residents out of the page, so the crowd alone is measured against the palette limit
+  const extra = process.env.EXTRA ? `&${process.env.EXTRA}` : '';
+  await send('Page.navigate', { url: `${base}${mode}${extra}&w=1280&h=720&crowd=${n}` });
   let ready = false;
   for (let i = 0; i < 600; i++) {
     const st = await js('({ frames: window.host && window.host.frames, assets: window.host && window.host.assets, error: window.host && window.host.error })');
