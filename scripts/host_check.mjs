@@ -108,6 +108,13 @@ need(netFar === NET_NATIVE, `netcode at a non-default link converges and equals 
 await js("document.getElementById('net').click()");
 const netText = await js("document.getElementById('netout').textContent");
 need(typeof netText === 'string' && netText.startsWith('converged'), `netcode HUD: the button shows the result on the page ("${netText}")`);
+// Step 8, second module: the clients on this page and the server in a Worker (server.wasm), through the same link delay.
+// The server must reach tick 120 and the clients and the server must equal the native reference.
+const wsess = await js(`import('./net_session.mjs').then((m) => m.runWorkerSession(window.host))`);
+console.log('worker session:', JSON.stringify(wsess));
+need(wsess && wsess.ok && wsess.tick === 120 && wsess.clientsAtT, `worker session: the server reaches tick 120 and every client does (server ${wsess && wsess.tick})`);
+need(wsess && wsess.serverHash === NET_NATIVE && wsess.clientHashes.every((h) => h === NET_NATIVE),
+  `worker session: server and clients equal the native reference ${NET_NATIVE} (server ${wsess && wsess.serverHash}, clients ${wsess && wsess.clientHashes})`);
 // Step 8 three colours (docs/frontier_plan.md line 206): the page's predicted sim and shown client against the server
 // for player 0, on the native test's link (9 ticks, jitter 2, no loss). Per snapshot tick the predicted sim stays within
 // 750 mm of the server; after the idle window within 10 mm; player 0 equals the server at T; and the shown client trails
