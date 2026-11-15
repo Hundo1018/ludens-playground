@@ -131,6 +131,10 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 
 ## Decisions
 
+- Step 2 check (2026-11-15): `scripts/frontier_check.mjs` is ported from the engine's removed script (commit f2e7941) and runs on the page in `pages.yml`. It passes against the playground page: 16 of 256 cells at the start, the walk loads cells, each of the four zones is reached by fast travel, cells behind are unloaded (87), and the zones' pictures differ.
+- Step 2 deviation: `app.ts` is `page/app.js` (plain JavaScript, no build step for the page's own script). The engine's shell runtime is still imported as before.
+
+
 - Licence: MIT for code (matches the engine). Third-party notices in `THIRD_PARTY.md`.
 - CI: `.github/workflows/pages.yml` is the only workflow. It checks the asset manifest and credits, builds the page
   against the pinned engine, plays it headless, checks native against wasm, and deploys from main. The engine's pixi
