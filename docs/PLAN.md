@@ -117,9 +117,9 @@ The three-colour draw is specified in `docs/frontier_plan.md` line 206: server t
 | 2 Frontier page | page in this repo | `page/index.html`, `page/app.js` (deviation: `app.js`, not `app.ts`); `host_check`, `touch_check` in CI (deviation: no `frontier_check.mjs` port) | done, deviated |
 | 3 Pages | deploy from main | run 24/120 for `ae83a36`; PR #34 merged | done |
 | 4 Asset pipeline | manifest, fetch, converters, credits | `fetch_assets.py --check`: 19 entries OK | done |
-| 5 Rendering | indexed mesh, skinned mesh, textures, triplanar ground, parity | #64–#66 engine; B3 parity on lavapipe; #36, #38 page | done |
+| 5 Rendering | indexed mesh, skinned mesh, textures, triplanar ground, parity; shadows on the mesh pass (user feedback #5) | #64–#67 engine (#67 shadow map, PCF); B3 parity on lavapipe; #36, #38 page; #48 page shadow pass, pinned to engine 5298757; `mesh_shadow_native` 2/2, `shadow_flip_native` 4/4 (map orientation); hub-frame luminance: footprint 52.7 to 19.8, lit top face unchanged | done (shadows: static meshes only, see below) |
 | 6 Characters and motion | CesiumMan, Fox, CMU motion, MotionDB | `host_check` M6: motion matching equals native (hash 992661) | done |
-| 7 Crowd | crowd in ecs.World, instanced skinned draws, HUD backend switch | #40 native 3b-0 numbers; `crowd_native` 5/5; browser SYNC timings environment-limited | native done; browser environment-limited |
+| 7 Crowd | crowd in ecs.World, instanced skinned draws, HUD backend switch | #40 native 3b-0 numbers; `crowd_native` 5/5; browser budget on the main build, SwiftShader, 1280×720, captured frame incl. readback: 0 extra 239.9 ms, 100 extra 531.3 ms; 200 and 400 did not complete the capture in the bench | done against the literal text; no count holds 16.7 ms on this software GPU (see below) |
 | 8 Range networking | server module, SnapshotServer/Client, SimLink, lag-compensated hits, latency controls, three-colour view | `net_frontier.mojo`, `frontier_net_native` 11/11; #41 latency sweep 0 to 150 ms; #43 display error; #46 page sliders (`host_check` at 150 ms); #47 predicted client (`net_predict_native` 10/10: per-tick predicted error 0 mm, 0 mm after idle, world hash equal at T, shot hit at 9 ticks and miss at the current tick), three-colour spheres on the page (`host_check` netview asserts) | done (caveat: the predicted error is zero by construction, see below) |
 
 Step 8, against the literal text: nothing open. The prediction-error bound and the three colours come from `docs/frontier_plan.md` lines 204 to 206 and 430, which `docs/PLAN.md` does not repeat. Caveat: the predicted sim's error is zero by construction, because `FrontierSim` moves each player from its own input alone; the bound passes but tests no hard case. The lag-compensated hit at 9 ticks is tested natively in `tests/net_predict_native.mojo`.
@@ -156,3 +156,19 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 - Orientation of the shadow map, numeric: `tests/shadow_flip_native.mojo` puts a box at (0.25, -0.25) and reads texel (40, 40) as depth 0.45, with the mirrored texels (24, 40) and (40, 24) open (4 of 4). This checks the map's texel layout against the shader's uv formula, uv = (0.5 + 0.5 x, 0.5 - 0.5 y). The shading side of that formula is not separately tested.
 - Scene check, by eye and not a number: each shadow meets its caster's base: the box's shadow at its left foot, the left pillar's at its foot, the Fox's under its body. The crops for the luminance measurements were chosen after viewing the frame.
 - Test: `tests/mesh_shadow_native.mojo` (native, in `scripts/test_frontier_native.sh`) builds the mesh pass with the shadow bindings and checks `set_shadow`'s argument. It does not render a shadowed pixel.
+
+## Step 5 shadows: what ships and what is measured
+
+- Shipped on `main` (#67 engine, #48 page): the mesh pass samples the sun's shadow map with a 3 by 3 PCF, bias 0.003 scaled by (1 - N.L). The sun is orthographic along the mesh shader's light direction, 12 m half-extent, centred on the origin.
+- Scope: static mesh items only. The skinned characters neither cast nor receive shadows.
+- Hub frame, shadow on against `?noshadow` (mean luminance of hand-chosen crops): footprint beside the blue box 52.7 to 19.8; lit top face 125.1 both; open ground 53.5 to 53.4.
+- Map orientation, numeric: `tests/shadow_flip_native.mojo` 4 of 4. Each shadow meets its caster's base by eye; that is not a number.
+
+## Step 7 browser budget (main build)
+
+- Build: `main` at #48 (`69f94ac`), engine pin 5298757. Browser: headless Chrome with SwiftShader, 1280×720, `NO_BENCH=1 SYNC=1 node scripts/crowd_bench.mjs`. Each sample is a captured frame, readback included.
+- Results: 0 extra instances 239.9 ms median (p90 290.2); 100 extra 531.3 ms (p90 582.6); about 2.9 ms per extra instance. 200 and 400 did not complete the capture within the bench's wait.
+- Earlier build, net-predict without shadows: 0 extra 173.8 ms; 100 extra 476.8 ms. The shadow pass costs about 66 ms per frame here.
+- Backlog: in bench mode (`bench=1`, every frame drawn) the GPU work queues faster than SwiftShader drains it, so the GPU_SYNC numbers track the submit interval rather than GPU time.
+- Conclusion: no count holds 60 Hz on this software rasterizer. The crowd count comes from the native 3b-0 budget. A hardware-GPU browser budget needs a machine with a GPU.
+
