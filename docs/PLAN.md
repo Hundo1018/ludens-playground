@@ -79,6 +79,10 @@ Ground tiles (half height at most 0.1 m) now draw on the mesh pass with layer 2 
 - Stage 2 physics: not a step of this plan. `docs/PLAN.md` has no physics step; it lives in `docs/frontier_plan.md`, which this plan supersedes.
 - Step 7: `SYNC=1` fails in this container; `GPU_SYNC=1` returns frame counts that grow about fivefold per sample, so the timing is environment-limited. The 3b-0 `ecs.World` vs OOP probe is still to run, natively.
 
+## Triplanar scale re-run on the textured floor (step 5)
+
+Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notown` so the floor crop holds no residents: 0.125 gives std-dev 12.96, 0.25 (pinned) 12.69, 0.5 12.52, 1.0 12.73. The spread is under half a level, so this metric does not separate the scales. The sweep stays at 0.25 until a visual comparison picks a value. This replaces the withdrawn result in PR #37.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
