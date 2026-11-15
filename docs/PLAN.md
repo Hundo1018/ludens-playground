@@ -148,7 +148,7 @@ Acceptance amended (W4): "0 residents on screen at the hub" measures visibility,
 
 ### Feasibility (probes run 2026-11-15)
 
-- W10 (ray-traced AO): the wgpu-mojo web layer has `wgpuDeviceCreateComputePipeline` and `wgpuComputePassEncoderDispatchWorkgroups` (in `web/implemented.txt`). A compute AO pass may need no wgpu-mojo PR; storage buffers still need checking.
+- W10 (ray-traced AO): `web/implemented.txt` has `BeginComputePass`, `ComputePassEncoderSetPipeline`, `ComputePassEncoderSetBindGroup`, `ComputePassEncoderDispatchWorkgroups`, `ComputePassEncoderEnd`, `BufferMapAsync`, `CommandEncoderCopyBufferToBuffer` and `CreateShaderModule`. Missing: `ComputePipelineGetBindGroupLayout`, so the layout is written by hand. A compute AO pass needs no wgpu-mojo PR for the pass itself; the missing function is a wgpu-mojo gap to fill if the hand-written layout proves fragile.
 - W7 (physics): `add_fracture_box` exists in ludens-core `embed/world.mojo` (17.90). No engine change is needed for one fracture wall.
 - W8 (sound): the engine's `app/main.mojo` already uses `add_clip_pcm`; `scripts/convert_wav.py` exists. The playground host has no audio output path yet, so W8 is host work.
 
