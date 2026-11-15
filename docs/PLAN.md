@@ -144,3 +144,14 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 - Page byte budget raised to 8 MB (2026-11-15, user's choice). The page was 2,898,491 bytes against the old 3 MB
   figure; one 256² RGBA texture with mips is about 350 KB, so ground and prop textures need the room. No check
   enforces the number yet; the next PR that adds a check uses 8 MB.
+
+## Step 5 shadows on the mesh pass (scope and evidence)
+
+- Scope of this slice: the static mesh items cast and receive shadows. The skinned characters neither cast nor receive them. The sun is orthographic along the mesh shader's light direction (0.4, 1.0, 0.6), 12 m half-extent, centred on the origin. `?noshadow` turns the depth pass and the factor off.
+- Engine side: ludens-engine PR #67, `MeshPass` shadow map, comparison sampler and light uniform, 3 by 3 PCF, bias 0.003 scaled by (1 - N.L). With the shadow off the factor is exactly 1.0.
+- Measured on the hub frame (`?offscreen&notown`, shadow on against `?noshadow`), mean luminance of hand-chosen crops:
+  - footprint beside the blue box: 52.7 off, 19.8 on
+  - the box's lit top face: 125.1 both (no acne on the face the light reaches)
+  - an open ground patch: 53.5 off, 53.4 on
+- Not measured: a light-direction flip. The crops were chosen after viewing the frame, so they cannot show a flip. Visually, each shadow meets its caster's base: the box's shadow at its left foot, the left pillar's at its foot, the Fox's under its body. A numeric check of the base contact is still open.
+- Test: `tests/mesh_shadow_native.mojo` (native, in `scripts/test_frontier_native.sh`) builds the mesh pass with the shadow bindings and checks `set_shadow`'s argument. It does not render a shadowed pixel.

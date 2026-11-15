@@ -54,3 +54,10 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/shadow_pass_native.mojo --target native -o build/shadow_pass_native
 build/shadow_pass_native
+# Step 5 mesh pass with the shadow factor: the engine's shadow bindings build, and set_shadow checks its argument.
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/mesh_shadow_native.mojo --target native -o build/mesh_shadow_native
+build/mesh_shadow_native
