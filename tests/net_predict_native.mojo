@@ -8,7 +8,7 @@ shooter saw it hits, and the same shot at the server's current tick misses (run_
 The measured numbers are printed, not tuned to the bound.
 """
 from harness.runner import Suite
-from app.net_predict import run_predict, PREDICT_T, PREDICT_SEED
+from app.net_predict import run_predict, run_predict_coupled, PREDICT_T, PREDICT_SEED
 from app.net_frontier import run_shot_session
 from geometry.vec import Real
 
@@ -25,6 +25,18 @@ def main() raises:
     s.check(r.p0_equal_at_end, "player 0 equal to the truth at T (tick, x and z)")
     s.check(r.world_equal_at_end, "the predicted world hash equals the server's at T")
     s.check(r.worst_lag_mm > 500, "the shown client trails the predicted sim (lag over 500 mm)")
+    # the hard case: player 0's moves are refused near the others, so its motion depends on them (the coupled sim)
+    var c = run_predict_coupled(9, 2, Real(0.0), PREDICT_SEED, PREDICT_T)
+    print("coupled: refused moves", c.blocks, " worst per-tick error (mm)", c.worst_predicted_mm, " after idle (mm)", c.worst_idle_mm)
+    s.check(c.blocks > 0, "player 0's moves are refused near the others (" + String(c.blocks) + " refused)")
+    s.check(c.worst_predicted_mm > 0, "the coupled predicted error is above zero: the bound now tests something")
+    # the bound is reported, not asserted: under coupling the predicted client, which cannot see the others' inputs,
+    # misses it. The number stands as measured (docs/PLAN.md, step 8).
+    var verdict = "MET" if c.worst_predicted_mm < 750 else "NOT MET"
+    print("coupled: 750 mm bound", verdict, "at", c.worst_predicted_mm, "mm")
+    s.check(c.worst_idle_mm < 10, "coupled error under 10 mm after 60 idle ticks (got " + String(c.worst_idle_mm) + ")")
+    s.check(c.world_equal_at_end, "coupled: the world hash equals the server's at T")
+    s.check(c.p0_equal_at_end, "coupled: player 0 equals the server at T")
     var shot = run_shot_session(9, 2, Real(0.0), PREDICT_SEED, PREDICT_T)
     print("shot at 9 ticks: found", shot.found, "shooter sees tick", shot.seen, "server at", shot.now)
     s.check(shot.found, "a shot frame exists at 9 ticks: the shooter sees an older tick and the target has moved")
