@@ -94,6 +94,7 @@ struct Host(Movable):
     var offscreen: Bool
     var bench_draw: Bool  # step 7 timing: draw every frame into the offscreen target, no readback
     var frame_ms: Float32
+    var prot: List[Float64]  # the protagonist: drawn x, z, heading; player x, z; velocity heading (W3 check)
     var cesium: Optional[Character]
     var fox: Optional[Character]
     var fox_clips: List[Character]  # the Fox's Survey (100), Walk (101) and Run (102) from the same file, in that order
@@ -140,6 +141,7 @@ struct Host(Movable):
         self.offscreen = False
         self.bench_draw = False
         self.frame_ms = 0
+        self.prot = List[Float64]()
         self.cesium = None
         self.fox = None
         self.fox_clips = List[Character]()
@@ -186,6 +188,7 @@ struct Host(Movable):
         self.offscreen = move.offscreen
         self.bench_draw = move.bench_draw
         self.frame_ms = move.frame_ms
+        self.prot = move.prot^
         self.cesium = move.cesium^
         self.fox = move.fox^
         self.fox_clips = move.fox_clips^
@@ -242,7 +245,7 @@ struct Host(Movable):
             self.renderer.value().push(item)
         if self.net_on and self.net_run:
             self._net_markers()
-        self._characters(view, m.world.player_pos())  # read while the world is held here, not inside _characters
+        self._characters(m.world.player_pos(), m.world.player_vel())  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
         var light = _light_vp()
@@ -297,7 +300,7 @@ struct Host(Movable):
         self.wall_mesh = self.renderer.value().meshes.add_static(cube[0].copy(), cube[1].copy(), cube[2].copy(), cube[3].copy())
         self.placed = True
 
-    def _characters(mut self, view: View, player: Vec3) raises:
+    def _characters(mut self, player: Vec3, vel: Vec3) raises:
         """Each frame: the two characters' palettes (one clip sampled at the clock, the rest pose's ancestors applied),
         their skinned draw items, and the palette buffer the renderer reads."""
         if not self.placed:
@@ -306,11 +309,22 @@ struct Host(Movable):
         var f = self.fox.value().copy()
         var pal = pose_palette(c, self.clock)
         var fox_base = c.joint_count
-        # the Fox cycles Survey, Walk, Run every 4 s (the same skeleton and mesh; only the clip changes)
-        var sel = Int(self.clock / 4.0) % 3
-        var fx = self.fox_clips[sel].copy() if len(self.fox_clips) == 3 else f.copy()
+        # the circling Fox walks at 1.5 m/s, so it keeps the Walk clip (plan W3: the four-second cycle is gone)
+        var fx = self.fox_clips[1].copy() if len(self.fox_clips) == 3 else f.copy()
         var pal_fox = pose_palette(fx, self.clock)
         pal.extend(pal_fox^)
+        # the protagonist (plan W3): the Fox at the player's position, its clip chosen by the player's speed
+        var speed = sqrt(vel[0] * vel[0] + vel[2] * vel[2])
+        var pclip = f.copy()
+        if len(self.fox_clips) == 3:
+            if speed < 0.2:
+                pclip = self.fox_clips[0].copy()
+            elif speed < 6.0:
+                pclip = self.fox_clips[1].copy()
+            else:
+                pclip = self.fox_clips[2].copy()
+        var player_base = len(pal) // 16
+        pal.extend(pose_palette(pclip, self.clock)^)
         # crowd (step 7): the live backend's members, each at its own clip phase, one palette each after the two above.
         # The palette is a list of floats, 16 per matrix; pose_id is a matrix index.
         var crowd_rows = List[CrowdRow]()
@@ -346,30 +360,37 @@ struct Host(Movable):
             self.town = tn^
         self.palette_used = len(pal) // 16
         self.renderer.value().skin_palette = pal^
-        # six units ahead of the eye, 1.5 to either side, feet on the ground (y = 0)
-        var ahead = Float64(6.0)
-        var side = Float64(1.5)
-        var cs = Vec3(
-            Real(Float64(view.eye[0]) + Float64(view.fwd[0]) * ahead - Float64(view.right[0]) * side), Real(0.0),
-            Real(Float64(view.eye[2]) + Float64(view.fwd[2]) * ahead - Float64(view.right[2]) * side), Real(0.0),
-        )
         # the Fox walks a circle of radius 6 m round the hub's centre and faces its direction of travel (a yaw about +Y;
         # the glTF model faces +Z)
         var ang = self.clock * 0.25
         var fpos = Vec3(Real(6.0 * cos(ang)), Real(0.0), Real(6.0 * sin(ang)), Real(0.0))
         var heading = atan2(-sin(ang), cos(ang))
         var half_h = heading * 0.5
-        self.renderer.value().push(DrawItem(
-            -1, cs, 0.0, 0.0, 0.0, 1.0,
-            Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.85), Real(0.7), Real(0.6), Real(0.0)),
-            self.skin_cesium, 0, 0,
-        ))
         # the Fox's glTF units are centimetres: 78.9 units tall, so scale 0.01 gives 0.79 m (U10)
         self.renderer.value().push(DrawItem(
             -1, fpos, 0.0, sin(half_h), 0.0, cos(half_h),
             Vec3(Real(0.01), Real(0.01), Real(0.01), Real(0.0)), Vec3(Real(0.9), Real(0.85), Real(0.7), Real(0.0)),
             self.skin_fox, fox_base, 1 if self.fox_tex_loaded else 0, 3,  # material 1 and layer 3 once the Fox's texture is up
         ))
+        # the protagonist: the Fox at the player's feet. Its heading is the velocity's, kept while the player stands still;
+        # the model faces +Z, so a yaw of atan2(vx, vz) about +Y points it along the velocity.
+        var prot_heading = self.prot[2]
+        if speed >= 0.2:
+            prot_heading = Float64(atan2(vel[0], vel[2]))
+        var prot_feet = Vec3(player[0], player[1] - Real(1.0), player[2], Real(0.0))
+        var ph = prot_heading * 0.5  # Float64, like the circling Fox's half angle
+        self.renderer.value().push(DrawItem(
+            -1, prot_feet, 0.0, sin(ph), 0.0, cos(ph),
+            Vec3(Real(0.01), Real(0.01), Real(0.01), Real(0.0)), Vec3(Real(0.9), Real(0.85), Real(0.7), Real(0.0)),
+            self.skin_fox, player_base, 1 if self.fox_tex_loaded else 0, 3,
+        ))
+        self.prot = List[Float64]()
+        self.prot.append(Float64(prot_feet[0]))
+        self.prot.append(Float64(prot_feet[2]))
+        self.prot.append(prot_heading)
+        self.prot.append(Float64(player[0]))
+        self.prot.append(Float64(player[2]))
+        self.prot.append(Float64(atan2(vel[0], vel[2])) if speed >= 0.2 else prot_heading)
         # the crowd: each member at its position on the floor (the flow field's), feet on the ground
         for k in range(len(crowd_bases)):  # the members that fit the palette (the rest were dropped above)
             var r = crowd_rows[k]
@@ -1098,3 +1119,13 @@ def playground_host_b3_result(app: UInt64) abi("C") -> Float64:
     except e:
         print("playground_host_b3_result:", e)
         return -2.0
+
+
+@export
+def playground_host_protagonist(app: UInt64, which: Int32) abi("C") -> Float64:
+    """W3: the protagonist as last drawn and the player's own state. 0 drawn x, 1 drawn z, 2 drawn heading (rad),
+    3 player x, 4 player z, 5 velocity heading (rad). 0 until the first frame with the Fox placed."""
+    var h = _host(app)
+    if len(h[].prot) != 6 or which < 0 or which > 5:
+        return 0.0
+    return h[].prot[Int(which)]
