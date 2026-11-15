@@ -124,7 +124,7 @@ Each item states its acceptance check, observable from the page or a native test
 
 **W10 Ray tracing (F14).** Feasibility first: `grep -n "ComputePipeline\|Dispatch\|StorageBuffer" build/deps/wgpu-mojo/web/implemented.txt`. Then the stage 7 check: a GPU BVH AO hit test agrees per ray with CPU `BVH.raycast` (t within 1e-3). The HUD label is "software ray-traced AO". If a WebGPU function is missing, it is a wgpu-mojo PR then a pin bump.
 
-**W11 Crowd in its own Worker, far-member LOD (F15, original Optimization design).** The 3b crowd moves to its own Worker with a far-member LOD; the main thread keeps only the visible set. Acceptance: the Worker's tick time is reported, and the page's frame time with 100 members is below the step-7 number recorded in this file. Open until measured.
+**W11 Crowd in its own Worker, far-member LOD (F15, original Optimization design).** The 3b crowd moves to its own Worker with a far-member LOD; the main thread keeps only the visible set. Acceptance: the Worker's tick time is reported, and the page's frame time with 100 members is below the step-7 number recorded in this file. Measured: the frame-time item is NOT MET (see Results below); the worker and the LOD are merged (#75, #76).
 
 ### Order and stopping rule
 
@@ -136,13 +136,27 @@ W2, W1, W3, then W4 with W5, W6, W8, W7, W9, W10, W11. Each step is one PR, stac
 |---|---|---|
 | W2 frame time | #63 | merged (`7450325`) |
 | W1 camera look | #64 | merged (`b35764e`); three green runs on `4a56a4b` (attempts 3, 5, 6) |
-| W3 protagonist | #65 | open; CI runs the check three times in one step |
-| W4a crowd loop | #66 | open; stacked on W3 |
-| W4b town in TOWN zone | #67 | open; stacked on W4a |
-| W5 hub pillars for the crowd | (this branch) | `tests/crowd_native.mojo` 8/8: no member in a pillar after 40 s, corners checked |
-| W6 to W11 | | not started |
+| W3 protagonist | #65 | merged (`87e18c5` head); the check runs three times in one CI step |
+| W4a crowd loop | #66 | merged |
+| W4b town in TOWN zone | #67 | merged |
+| W5 hub pillars for the crowd | #68 | merged; no green CI run on its exact head (the content was unchanged from a green head, and the native test passes 8/8 locally) |
+| W7 physics zone (quarry wall) | #69 | merged; the wall falls and breaks (deviation: a falling wall, not the pendulum; stress 50 Pa) |
+| W9 default view and HUD | #70 | merged |
+| W6 one objective loop | #71 (goals, merged `0271319`), #72 (guard, merged `08a017a`; the browser contact check `scripts/guard_check.mjs` passes in CI, three runs) |
+| W8 sound | #73 | merged (`377125b`); `audio_check` passes in CI (three runs): four effects registered, the goal sound starts once, the worklet is fed with 0 underruns. Verified by counters only; no visual check for sound. |
+| W10 ray tracing | #74 (GPU trace, native), engine #69 (AO grid), #77 (AO term) | #74 merged (GPU trace, native, agrees with `BVH.raycast`); engine #69 merged as `3677790`; #77 merged (`a48b888`), the AO term, CI green on the pinned commit. Visual: at the pillar base, luminance 60.0 with `?noao` and 45.4 with AO; open floor 47.6 in both. #79 merged (`fe70959`): the HUD shows SOFTWARE RAY-TRACED AO with the grid set and not with `?noao` (bench-mode captures). |
+| W11 worker and far-member LOD | #75 (worker), #76 (LOD), #78 (palette-drop check with the LOD off) | merged; the frame-time item is NOT MET (see below) |
 
 Visual checks: W1 `look_check`; W3 protagonist frame in `zone_quarry.png`; W4a `crowd60.png` (members in a band on the square, none round the player); W4b `zone_town.png` (residents in the streets).
+
+### Results of the review work order (2026-11-15)
+
+- **W11 frame time: NOT MET.** The worker does not lower the page's frame time in the measured conditions. Headless SwiftShader, 200 samples per mode: 100 members, crowd off 1.00 ms, main thread 1.30 ms, worker 1.30 ms; 200 members, off 1.00 ms, main thread 1.50 ms, worker 1.40 ms. The timer resolves 0.1 ms, so the worker-to-main gap is at the limit. The far-member LOD (#76) is in, and it is what the 200-member figures include. The comparison against the step-7 number (819.80 ms, the "100 extra" row of the pinned-build budget) is not like-for-like: that is a GPU-inclusive browser budget on an older build, measured under other conditions. Recorded as not met; the same-session comparison is the one that counts.
+- **W10 visible AO: the grid is filled on the CPU.** The GPU trace (#74) reads its result back with a blocking device poll, which wgpu-mojo marks native-only, so the web build cannot call it. The AO grid (`app/ao_grid.mojo`) uses ludens-core's `BVH.raycast`, the same arithmetic the GPU trace is checked against natively (`rt_native` 3 of 3). Visual check, same camera: the floor at a pillar base has mean luminance 60.0 with `?noao` and 45.4 with AO; open floor is 47.6 in both. A still, not an animation.
+- **W11, step-7 method (`scripts/crowd_bench.mjs`, the same method as the step-7 browser budget):** captured frames, readback included, SwiftShader, 30 samples, town off, one session. Main thread, 100 extra: median 591.0 ms (p90 692.3); worker, 100 extra: median 651.9 ms (p90 725.6). Zero extra in the same session: 136.9 ms. The worker is not faster on this metric. The 819.80 ms in the step-7 section is from an older build and a different session, so it is not a like-for-like comparison; the same-session comparison above is the one that counts.
+- **W8 sound: counter-verified only.** The zone goal starts a CC0 sound and the worklet is fed; there is no visual check for sound.
+- **Deviations from the work order:** the falling wall replaces the pendulum (W7); the palette-drop path of the crowd guard is no longer reached from the hub camera after the LOD, so `host_check` asserts the palette bound and the LOD count instead (the drop path has no live test from this view); the guard speed is 7 m/s (W6); TOWN visibility wording as amended above.
+- **Process note:** #68 merged on a head without its own green CI run. The content matched a green head, and its native test passes locally; disclosed here.
 
 Acceptance amended (W4): "0 residents on screen at the hub" measures visibility, and it is 17 of 24 from the hub's view distance, because the far town is inside the view. The residents are not in the hub; the count is not a location test.
 
