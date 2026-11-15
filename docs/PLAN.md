@@ -102,6 +102,9 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 ## Step 8: the three-colour draw, the spec as written
 
 The plan names a "three-colour draw" in step 8 and defines it nowhere else in `docs/`. Read as the three states a netcode view can show: the server's state, the state the client shows, and a predicted state. `SnapshotClient` shows the last received snapshot and has no predicted state, so the third colour is absent from the playground. The draw of the two available states (server and client-shown) is not built yet. The prediction-error bound is the separate, still-open item.
+## Step 5: shadow depth pass, native
+
+`app/shadow_pass.mojo` draws the mesh items from an orthographic light into a Depth32Float texture, with no fragment stage. `tests/shadow_pass_native.mojo`: a unit box's centre reads depth 0.25 (its near face) and an open corner reads the cleared 1.0 (2 of 2 checks). Found and fixed on the way: `Vec3` takes four components (`Vec3(x, y, z, 0)`); three gave a run-time segfault. Not yet: sampling the map in the mesh fragment shader with PCF, and the hub-frame shadowed-pixel fraction.
 
 ## Done means
 
