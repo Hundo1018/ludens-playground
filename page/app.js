@@ -73,6 +73,8 @@ async function boot() {
   if (!params.has("notown")) x.playground_host_town(app, 1);
   // The sun's shadow (plan step 5): on by default; ?noshadow turns the depth pass and the shadow factor off.
   x.playground_host_shadow(app, params.has("noshadow") ? 0 : 1);
+  // The three-colour netcode view (plan step 8): server truth, predicted and shown, drawn for player 0 on a 150 ms link.
+  if (params.has("netview")) x.playground_host_netview(app, 1, 9, 2, 0);
   if (params.has("notex")) x.playground_host_notex(app, 1); // debug: an untextured comparison frame
   if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
   if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
