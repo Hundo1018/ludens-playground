@@ -81,7 +81,7 @@ Ground tiles (half height at most 0.1 m) now draw on the mesh pass with layer 2 
 
 ## Triplanar scale re-run on the textured floor (step 5)
 
-Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notown` so the floor crop holds no residents: 0.125 gives std-dev 12.96, 0.25 (pinned) 12.69, 0.5 12.52, 1.0 12.73. The spread is under half a level, so this metric does not separate the scales. The sweep stays at 0.25 until a visual comparison picks a value. This replaces the withdrawn result in PR #37.
+Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notown` so the floor crop holds no residents: 0.125 gives std-dev 12.96, 0.25 (pinned) 12.69, 0.5 12.52, 1.0 12.73. The spread is under half a level, so this metric does not separate the scales. Visual choice (floor crops from the four captures): at 0.125 the pebbles are oversized and blurry up close; at 0.25 they read as pebbles at a believable size; at 0.5 and 1.0 the texture collapses into fine grit. The scale stays at 0.25. Step 5's texture work is done with this choice. This replaces the withdrawn result in PR #37.
 
 ## Done means
 
