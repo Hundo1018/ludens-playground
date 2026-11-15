@@ -23,7 +23,7 @@ from motion_match import build_match, m6_hash
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow, positions_hash
-from town import Town, RESIDENTS
+from town import Town, RESIDENTS, CONTACT_R
 from geometry.mat import Mat4, transform_point4
 from game.arena import DrawItem
 from wgpu._backend.wgpu_native.types import WGPUTextureAspect
@@ -114,6 +114,8 @@ struct Host(Movable):
     var crowd_ext: Bool  # W11: the crowd's rows come from the worker (playground_host_crowd_feed); the page does not step it
     var ext_rows: List[CrowdRow]  # W11: the worker's rows for this frame
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
+    var contacts: Int  # W6: the guard touched the player (the player is sent back to the hub)
+    var reset_player: Bool  # W6: set by a contact this frame, acted on after the draw
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
     var palette_dropped: Int  # skinned members that did not fit PALETTE_MATRICES, counted since the page started
@@ -167,6 +169,8 @@ struct Host(Movable):
         self.town = None
         self.crowd_ext = False
         self.ext_rows = List[CrowdRow]()
+        self.contacts = 0
+        self.reset_player = False
         self.tex_job = None
         self.b3_job = None
         self.palette_dropped = 0
@@ -220,6 +224,8 @@ struct Host(Movable):
         self.crowd_ext = move.crowd_ext
         self.ext_rows = move.ext_rows.copy()
         self.town = move.town^
+        self.contacts = move.contacts
+        self.reset_player = move.reset_player
         self.tex_job = move.tex_job^
         self.shadow = move.shadow^
         self.shadow_on = move.shadow_on
@@ -266,6 +272,9 @@ struct Host(Movable):
             self._net_markers()
         var cview = View(m.camera(), Real(Float64(self.width) / Float64(self.height)))  # the crowd's visible set (W11 LOD)
         self._characters(m.world.player_pos(), m.world.player_vel(), cview)  # read while the world is held here, not inside _characters
+        if self.reset_player:  # W6: a guard contact sends the player back to the hub (the next frame shows it there)
+            self.reset_player = False
+            m.world.teleport(0.0, 0.0)  # m holds the world here: self.world is None until it is restored below
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
         var light = _light_vp()
@@ -384,9 +393,14 @@ struct Host(Movable):
         # the town (plan stage 3): 24 residents and the guard, each a CesiumMan at its ORCA position, its clip phase spread
         var town_rows = List[Vec3]()
         var town_bases = List[Int]()
+        var town_guard = -1  # W6: the guard's row, drawn in a distinct colour
         if self.town:
             var tn = self.town.take()
             tn.step(Real(1.0 / 60.0), player)
+            town_guard = tn.guard
+            if tn.guard_distance(player) < CONTACT_R:
+                self.contacts += 1
+                self.reset_player = True
             for k in range(len(tn.crowd.pos)):
                 if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
                     self.palette_dropped += len(tn.crowd.pos) - k
@@ -444,7 +458,8 @@ struct Host(Movable):
             var pos = Vec3(tp[0], Real(0.0), tp[2], Real(0.0))
             self.renderer.value().push(DrawItem(
                 -1, pos, 0.0, 0.0, 0.0, 1.0,
-                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
+                Vec3(Real(0.85), Real(0.12), Real(0.1), Real(0.0)) if k == town_guard else Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
                 self.skin_cesium, town_bases[k], 0,
             ))
 
@@ -1265,3 +1280,9 @@ def playground_host_crowd_feed(app: UInt64, ptr: UInt64, n: Int32) abi("C") -> I
                              Int(src.unsafe_offset(4 * i + 2)[]), Int(src.unsafe_offset(4 * i + 3)[])))
     h[].ext_rows = rows^
     return 0
+
+
+@export
+def playground_host_contacts(app: UInt64) abi("C") -> Int32:
+    """W6: how many times the town's guard has touched the player since the town was switched on."""
+    return Int32(_host(app)[].contacts)

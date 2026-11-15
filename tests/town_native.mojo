@@ -62,4 +62,6 @@ def main() raises:
     s.check(worst > Real(-0.05), "minimum pairwise separation stays above -0.05 m over the run: " + String(worst) + " m")
     s.check(inside_square(player), "the test player stands in the square")
     s.check(guard60 < guard0, "the guard closes on the still player within 60 ticks: " + String(guard0) + " m -> " + String(guard60) + " m")
+    var guard_end = t.guard_distance(player)
+    s.check(guard_end < Real(1.0), "the guard reaches a still player within the contact distance (1 m) after 1200 ticks: " + String(guard_end) + " m")
     s.finish()
