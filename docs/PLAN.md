@@ -79,6 +79,9 @@ Ground tiles (half height at most 0.1 m) now draw on the mesh pass with layer 2 
 - Stage 2 physics: not a step of this plan. `docs/PLAN.md` has no physics step; it lives in `docs/frontier_plan.md`, which this plan supersedes.
 - Step 7: `SYNC=1` fails in this container; `GPU_SYNC=1` returns frame counts that grow about fivefold per sample, so the timing is environment-limited. The 3b-0 `ecs.World` vs OOP probe is still to run, natively.
 
+## Probe 3b-0: crowd step per ECS backend against an object list (step 7)
+
+`benchmarks/crowd_3b0.mojo`, native, 30 samples per row, median ms per step: N = 10,000: sparse-set 0.38, naive 0.54, OOP list 0.42. N = 50,000: sparse-set 1.90, naive 2.41, OOP 2.28. N = 100,000: sparse-set 3.22, naive 2.46, OOP 2.94. The OOP list does not run the flow field, so it is a floor for the object layout, not the same workload. At 1e5 the naive backend is faster than sparse-set, the reverse of the smaller counts; the sparse-set cost grows faster. Native only: a browser step at 1e5 is measured on the page (`crowd_bench.mjs`), where the GPU readback is the limit, not this step.
 ## Triplanar scale re-run on the textured floor (step 5)
 
 Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notown` so the floor crop holds no residents: 0.125 gives std-dev 12.96, 0.25 (pinned) 12.69, 0.5 12.52, 1.0 12.73. The spread is under half a level, so this metric does not separate the scales. Visual choice (floor crops from the four captures): at 0.125 the pebbles are oversized and blurry up close; at 0.25 they read as pebbles at a believable size; at 0.5 and 1.0 the texture collapses into fine grit. The scale stays at 0.25. Step 5's texture work is done with this choice. This replaces the withdrawn result in PR #37.
@@ -92,6 +95,9 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 ## Step 5: shadow probe, native (depth through a comparison sampler)
 
 `tests/shadow_probe_native.mojo`: a Depth32Float texture written by a render pass cleared to 0.5, sampled once in a compute shader through a LessEqual comparison sampler at references 0.25 and 0.75. Result: 1.0 and 0.0 (2 of 2 checks). The depth-plus-comparison binding path works through wgpu-mojo natively. The shadow pass itself (light camera, depth pass, PCF in the mesh fragment shader) is not built yet; this is the riskiest unknown, now resolved.
+## Step 8: netcode latency sweep, 0 to 150 ms (native)
+
+`benchmarks/net_latency_150ms.mojo`: one-way latency 0 to 9 ticks (0 to 150 ms at 60 Hz), 10 % loss, jitter 3, three seeds per row. Every latency converged (3 of 3) and matched the reference hash (3 of 3). Mean frames to finish 120 ticks: 126 at 0 ms, 145 at 116 ms, 148 at 150 ms. This measures convergence and state equality, not the prediction error that the plan's bound refers to. That bound is still unmeasured.
 
 ## Done means
 
