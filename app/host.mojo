@@ -520,6 +520,27 @@ def playground_host_town(app: UInt64, on: Int32) abi("C") -> Int32:
 
 
 @export
+def playground_host_town_on_screen(app: UInt64) abi("C") -> Int32:
+    """Debug (resident-visibility check): how many town members project inside the view (in front of the camera and
+    within the frustum), counted from the camera the page is drawing with. -1 if the town or the world is not there."""
+    var h = _host(app)
+    if not h[].town or not h[].world:
+        return -1
+    var m = h[].world.take()
+    var view = View(m.camera(), Real(Float64(h[].width) / Float64(h[].height)))
+    h[].world = m^
+    var tn = h[].town.take()
+    var n: Int32 = 0
+    for k in range(len(tn.crowd.pos)):
+        var p = tn.crowd.pos[k]
+        var c = view.project(Vec3(p[0], Real(0.9), p[2], Real(0.0)))
+        if c.w > view.near and abs(c.x) <= c.w and abs(c.y) <= c.w:
+            n += 1
+    h[].town = tn^
+    return n
+
+
+@export
 def playground_host_crowd_switch(app: UInt64) abi("C") -> Int32:
     """The HUD's backend switch: flips the live backend of the crowd and returns 1 for the naive backend, 0 for the
     sparse-set one; -1 if there is no crowd."""
