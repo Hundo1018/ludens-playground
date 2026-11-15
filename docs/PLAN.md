@@ -142,9 +142,9 @@ W2, W1, W3, then W4 with W5, W6, W8, W7, W9, W10, W11. Each step is one PR, stac
 | W5 hub pillars for the crowd | #68 | merged; no green CI run on its exact head (the content was unchanged from a green head, and the native test passes 8/8 locally) |
 | W7 physics zone (quarry wall) | #69 | merged; the wall falls and breaks (deviation: a falling wall, not the pendulum; stress 50 Pa) |
 | W9 default view and HUD | #70 | merged |
-| W6 one objective loop | #71 (goals, merged `0271319`), #72 (guard) | #71 (goals): the local native suite passes on its head (11 binaries); the HUD visual shows GOAL 0/4 at the hub and GOAL 1/4 at the quarry goal. Its CI run is in progress (native harness and browser checks passing; the last step was running at the time of writing). Not merged. #72 (guard) is stacked on it and not rebased yet. |
-| W8 sound | #73 | #73 (sound): stacked on #72, not rebased. Counter-verified only (`audio_check`); no visual check for sound. |
-| W10 ray tracing | #74 (GPU trace, native), engine #69 (AO grid), #77 (AO term) | #74 merged (GPU trace, native, agrees with `BVH.raycast`); engine #69 merged as `3677790`; #77 merged (`a48b888`), the AO term, CI green on the pinned commit. Visual: at the pillar base, luminance 60.0 with `?noao` and 45.4 with AO; open floor 47.6 in both. |
+| W6 one objective loop | #71 (goals, merged `0271319`), #72 (guard, merged `08a017a`; the browser contact check `scripts/guard_check.mjs` passes in CI, three runs) |
+| W8 sound | #73 | merged (`377125b`); `audio_check` passes in CI (three runs): four effects registered, the goal sound starts once, the worklet is fed with 0 underruns. Verified by counters only; no visual check for sound. |
+| W10 ray tracing | #74 (GPU trace, native), engine #69 (AO grid), #77 (AO term) | #74 merged (GPU trace, native, agrees with `BVH.raycast`); engine #69 merged as `3677790`; #77 merged (`a48b888`), the AO term, CI green on the pinned commit. Visual: at the pillar base, luminance 60.0 with `?noao` and 45.4 with AO; open floor 47.6 in both. #79 merged (`fe70959`): the HUD shows SOFTWARE RAY-TRACED AO with the grid set and not with `?noao` (bench-mode captures). |
 | W11 worker and far-member LOD | #75 (worker), #76 (LOD), #78 (palette-drop check with the LOD off) | merged; the frame-time item is NOT MET (see below) |
 
 Visual checks: W1 `look_check`; W3 protagonist frame in `zone_quarry.png`; W4a `crowd60.png` (members in a band on the square, none round the player); W4b `zone_town.png` (residents in the streets).
