@@ -126,6 +126,7 @@ async function boot() {
       const t0 = performance.now();
       const r = x.playground_host_frame(app, dt);
       stats.frameMs = performance.now() - t0;
+      x.playground_host_set_frame_ms(app, stats.frameMs);
       if (r < 0) throw new Error("playground_host_frame returned " + r);
       if (r === 1) stats.frames++;
       requestAnimationFrame(frame);
