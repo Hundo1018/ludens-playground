@@ -47,3 +47,10 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/shadow_probe_native.mojo --target native -o build/shadow_probe_native
 build/shadow_probe_native
+# Step 5 shadow depth pass: a unit box drawn from an orthographic light into a depth texture (plan step 5).
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/shadow_pass_native.mojo --target native -o build/shadow_pass_native
+build/shadow_pass_native

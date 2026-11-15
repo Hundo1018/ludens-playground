@@ -99,6 +99,10 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 
 `benchmarks/net_latency_150ms.mojo`: one-way latency 0 to 9 ticks (0 to 150 ms at 60 Hz), 10 % loss, jitter 3, three seeds per row. Every latency converged (3 of 3) and matched the reference hash (3 of 3). Mean frames to finish 120 ticks: 126 at 0 ms, 145 at 116 ms, 148 at 150 ms. This measures convergence and state equality, not the prediction error that the plan's bound refers to. That bound is still unmeasured.
 
+## Step 5: shadow depth pass, native
+
+`app/shadow_pass.mojo` draws the mesh items from an orthographic light into a Depth32Float texture, with no fragment stage. `tests/shadow_pass_native.mojo`: a unit box's centre reads depth 0.25 (its near face) and an open corner reads the cleared 1.0 (2 of 2 checks). Found and fixed on the way: `Vec3` takes four components (`Vec3(x, y, z, 0)`); three gave a run-time segfault. Not yet: sampling the map in the mesh fragment shader with PCF, and the hub-frame shadowed-pixel fraction.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
