@@ -65,3 +65,6 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
   rights beyond them. The model's CC-BY 4.0 licence does not cover the logo. CesiumMan therefore stays untextured.
   Textured characters come from models whose whole texture is CC-BY or CC0 (the Fox, and any further Khronos model
   checked the same way).
+- Page byte budget raised to 8 MB (2026-11-15, user's choice). The page was 2,898,491 bytes against the old 3 MB
+  figure; one 256² RGBA texture with mips is about 350 KB, so ground and prop textures need the room. No check
+  enforces the number yet; the next PR that adds a check uses 8 MB.
