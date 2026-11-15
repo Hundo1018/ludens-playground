@@ -49,6 +49,10 @@ asset policy. Where the two disagree, this file wins; where this file is silent,
 8. **Range networking (5).** Authoritative server in a second module, `SnapshotServer` / `SnapshotClient`, `SimLink`
    latency controls, lag-compensated hits. Reuses the engine's `gameplay/netcode`.
 
+## Wall texture (step 5)
+
+`concrete_wall_003` replaces `concrete_wall_008` (source std-dev 27.8, against 2.6). The hub frame does not change: 0 of 518,400 pixels differ between the old and new captures (`scripts/texture_compare.py`). Cause: a scene box with `mesh_id = -1` takes the primitive path in the engine's `app/render3d.mojo`, which carries no texture and ignores `material` and `layer`. The host sets `material = 2` on walls but gives them no mesh. Fix: register a unit cube with `renderer.meshes.add_static` and set the wall items' `mesh_id` to it (the mesh pass samples triplanar on layer 1). Then re-measure.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
