@@ -105,7 +105,14 @@ async function boot() {
   // The sun's shadow (plan step 5): on by default; ?noshadow turns the depth pass and the shadow factor off.
   x.playground_host_shadow(app, params.has("noshadow") ? 0 : 1);
   // The three-colour netcode view (plan step 8): server truth, predicted and shown, drawn for player 0 on a 150 ms link.
-  if (params.has("netview")) x.playground_host_netview(app, 1, 9, 2, 0);
+  // The three-colour netcode view (W9): on by default, labelled, and a button turns it off (?nonetview starts it off).
+  // The recorded choice is on: the view is the step-8 showcase and the visitor should see it without a URL parameter.
+  let netviewOn = !params.has("nonetview");
+  const netviewBtn = document.getElementById("netview");
+  const setNetview = (on) => { netviewOn = on; x.playground_host_netview(app, on ? 1 : 0, 9, 2, 0); if (netviewBtn) netviewBtn.textContent = "netview: " + (on ? "on" : "off"); };
+  if (netviewBtn) netviewBtn.onclick = () => setNetview(!netviewOn);
+  setNetview(netviewOn);
+  if (params.has("debug")) x.playground_host_debug(app, 1);
   if (params.has("notex")) x.playground_host_notex(app, 1); // debug: an untextured comparison frame
   if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
   if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
