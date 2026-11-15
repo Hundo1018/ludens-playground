@@ -68,6 +68,17 @@ Source contrast (luminance std-dev of the 1024 px JPEG resized to 256 px): rock 
 
 Result after the mesh change: walls are drawn on the mesh pass with layer 1 (`concrete_wall_003`), and the pillars show the concrete texture at the same size. 9.18% of the hub frame differs from the untextured-mesh capture (`scripts/texture_compare.py`); the pillar crop's mean moves by 21 to 40 luminance levels. The ground crop is unchanged (10.25 vs 10.14). Next: the triplanar scale for the walls (0.25 per metre) and the ground's contrast.
 
+## Ground tiles on the mesh pass (step 5)
+
+Ground tiles (half height at most 0.1 m) now draw on the mesh pass with layer 2 (the rock). Before, they took the primitive path, which ignores the texture, so the rock never showed. On the hub frame with `?notown`, the floor now shows the rock texture (checked on the captured frame). `?notex` A/B: 74% of pixels differ, and the textured floor is about 23 levels darker on average. Floor std-dev is not a usable measure here: the untextured floor scores 13.97 because its crop picks up other content.
+
+## Audits (plan status)
+
+- Step 6: `host_check` passes M6 on the page: motion matching returns the same 20 indices as native (hash 992661).
+- Step 8: implemented in part. `app/net_frontier.mojo` has `SnapshotServer` over lossy `SimLink`s, lag compensation through `TargetRing` and `shot_hits`. `host_check` passes the netcode session on the page (equal to native). Not yet checked: the prediction-error bound and the three-colour draw named in this plan.
+- Stage 2 physics: not a step of this plan. `docs/PLAN.md` has no physics step; it lives in `docs/frontier_plan.md`, which this plan supersedes.
+- Step 7: `SYNC=1` fails in this container; `GPU_SYNC=1` returns frame counts that grow about fivefold per sample, so the timing is environment-limited. The 3b-0 `ecs.World` vs OOP probe is still to run, natively.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.

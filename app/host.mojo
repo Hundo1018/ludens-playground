@@ -203,13 +203,12 @@ struct Host(Movable):
         self.renderer.value().begin(view)
         for it in m.scene():
             var item = it.copy()
-            if item.kind == 0:  # the scenery (ground, walls, boxes) is textured: the concrete wall on layer 1
+            if item.kind == 0:  # the scenery (ground tiles, walls, boxes) is textured on the mesh pass
                 item.material = 2
-                if item.half[1] <= Real(0.1):  # the flat ground tiles (half height 0.05) on layer 2, on the primitive path
-                    if self.ground_loaded:
+                if self.wall_mesh >= 0:
+                    if self.ground_loaded and item.half[1] <= Real(0.1):  # the flat ground tiles (half height 0.05) on layer 2
                         item.layer = 2
-                elif self.wall_mesh >= 0:  # the taller scenery (walls, boxes) on the mesh pass, which samples layer 1
-                    item.mesh_id = self.wall_mesh
+                    item.mesh_id = self.wall_mesh  # walls keep layer 1
                     item.half = item.half * Real(2.0)  # the unit cube has half-extent 0.5; the mesh pass scales it by half
             self.renderer.value().push(item)
         self._characters(view, m.world.player_pos())  # read while the world is held here, not inside _characters
