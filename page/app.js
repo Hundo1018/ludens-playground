@@ -13,7 +13,7 @@ if (params.has("w") && params.has("h")) { canvas.width = Number(params.get("w"))
 const stats = (window.host = { frames: 0, error: "", frameMs: 0, app: 0n, rt: null, x: null, assets: 0 });
 
 // The page's converted assets, by file name: the kind playground_host_asset expects (see app/host.mojo).
-const ASSET_KIND = { "CesiumMan.lcharacter": 1, "Fox.lcharacter": 2, "concrete_wall_008.ltexture": 3 };
+const ASSET_KIND = { "CesiumMan.lcharacter": 1, "Fox.lcharacter": 2, "concrete_wall_008.ltexture": 3, "rocks_ground_01.ltexture": 4 };
 
 // Each entry of index.json is fetched, checked against its sha256 by the engine's loader, copied into wasm memory,
 // handed to the host, and freed once the call has returned (the host copies the bytes).

@@ -14,6 +14,17 @@ source_page = "https://polyhaven.com/a/concrete_wall_008"
 changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py"
 
 [[asset]]
+id = "tex_rocks_ground_01"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rocks_ground_01/rocks_ground_01_diff_1k.jpg"
+file = "rocks_ground_01_diff_1k.jpg"
+sha256 = "294214908cbb1785125954ac5e631cb12ad05f2c2960458cf5fc485799841294"
+license = "CC0-1.0"
+author = "Rob Tuytel (Poly Haven)"
+source_page = "https://polyhaven.com/a/rocks_ground_01"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; used as the ground texture"
+
+[[asset]]
 id = "char_cesiumman"
 kind = "character"
 url = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb"

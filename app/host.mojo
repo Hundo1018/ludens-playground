@@ -94,6 +94,8 @@ struct Host(Movable):
     var fox: Optional[Character]
     var fox_clips: List[Character]  # the Fox's Survey (100), Walk (101) and Run (102) from the same file, in that order
     var wall: Optional[List[List[UInt8]]]
+    var ground: Optional[List[List[UInt8]]]  # the rock texture for the flat ground tiles (layer 2)
+    var ground_loaded: Bool
     var clock: Float64  # seconds of animation, advanced per frame
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
     var skin_cesium: Int
@@ -127,6 +129,8 @@ struct Host(Movable):
         self.fox = None
         self.fox_clips = List[Character]()
         self.wall = None
+        self.ground = None
+        self.ground_loaded = False
         self.clock = 0.0
         self.placed = False
         self.skin_cesium = -1
@@ -160,6 +164,8 @@ struct Host(Movable):
         self.fox = move.fox^
         self.fox_clips = move.fox_clips^
         self.wall = move.wall^
+        self.ground = move.ground^
+        self.ground_loaded = move.ground_loaded
         self.clock = move.clock
         self.placed = move.placed
         self.skin_cesium = move.skin_cesium
@@ -180,13 +186,15 @@ struct Host(Movable):
         if not self.hud:
             self.hud = Hud(self.boot.device(), format)
         if not self.renderer:
-            self.renderer = ArenaRenderer(self.boot.device(), format, view)
+            self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=3)  # layers: white, wall, ground
         self._register()
         self.renderer.value().begin(view)
         for it in m.scene():
             var item = it.copy()
-            if item.kind == 0:  # the scenery (ground, walls, boxes) is textured with the concrete wall, layer 1
+            if item.kind == 0:  # the scenery (ground, walls, boxes) is textured: the concrete wall on layer 1
                 item.material = 2
+                if self.ground_loaded and item.half[1] <= Real(0.1):  # the flat ground tiles (half height 0.05) on layer 2
+                    item.layer = 2
             self.renderer.value().push(item)
         self._characters(view, m.world.player_pos())  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
@@ -194,7 +202,11 @@ struct Host(Movable):
         self.world = m^
 
     def _register(mut self) raises:
-        """Once both characters and the wall are on the page: their meshes and the texture layer go to the renderer."""
+        """Once both characters and the wall are on the page: their meshes and the texture layer go to the renderer.
+        The ground texture is uploaded on its own, as soon as both it and the renderer are there."""
+        if self.ground and not self.ground_loaded and self.renderer:
+            self.renderer.value().textures.load_layer(self.boot.device(), UInt32(2), self.ground.value().copy())
+            self.ground_loaded = True
         if self.placed or not self.cesium or not self.fox or not self.wall:
             return
         var c = self.cesium.value().copy()
@@ -445,6 +457,8 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
             h[].fox_clips.append(parse_character(bytes, 102))
         elif kind == 3:
             h[].wall = parse_ltexture(bytes)
+        elif kind == 4:
+            h[].ground = parse_ltexture(bytes)
         else:
             raise Error("playground_host_asset: unknown kind " + String(kind))
         return 0

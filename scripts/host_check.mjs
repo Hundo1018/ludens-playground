@@ -80,8 +80,8 @@ await key('keyup', 'KeyD'); await key('keyup', 'KeyW');
 const moved = await grab('moved');
 if (hub && moved) { const n = differ(hub, moved); need(n > 5000, `holding W and D changed the picture (${n} pixels)`); }
 // the converted assets: both characters and the wall are on the page before the character checks
-for (let i = 0; i < 400; i++) { if ((await js('window.host && window.host.assets')) >= 3) break; await sleep(100); }
-need((await js('window.host && window.host.assets')) === 3, 'the page loads the three converted assets (both characters, the wall)');
+for (let i = 0; i < 400; i++) { if ((await js('window.host && window.host.assets')) >= 4) break; await sleep(100); }
+need((await js('window.host && window.host.assets')) === 4, 'the page loads the four converted assets (both characters, the wall, the ground rock)');
 // B1 (design 1.10): the rest-pose palette, applied by the CPU reference, against root_transform * p (< 1e-4)
 for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
   const err = await js(`window.host.x.playground_host_b1_check(window.host.app, ${which})`);
