@@ -131,6 +131,8 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
 
 ## Decisions
 
+- Visual check per stage: `python3 scripts/stage_shots.py <chrome> <url> <out-dir>` captures named scenes of the page through its offscreen render path (`scripts/capture_scene.mjs`) and writes one labelled `sheet.png` for viewing. The default scenes are hub, netview, noshadow and crowd. It works without a GPU, on the software adapter.
+
 - Step 2 check (2026-11-15): `scripts/frontier_check.mjs` is ported from the engine's removed script (commit f2e7941) and runs on the page in `pages.yml`. It passes against the playground page: 16 of 256 cells at the start, the walk loads cells, each of the four zones is reached by fast travel, cells behind are unloaded (87), and the zones' pictures differ.
 - Step 2 deviation: `app.ts` is `page/app.js` (plain JavaScript, no build step for the page's own script). The engine's shell runtime is still imported as before.
 
