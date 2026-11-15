@@ -64,7 +64,7 @@ Source contrast (luminance std-dev of the 1024 px JPEG resized to 256 px): rock 
 
 ## Triplanar scale sweep (step 5)
 
-`scripts/triplanar_sweep.py` rebuilt the page at three triplanar scales (per metre) and measured the hub ground crop: 0.125 gives std-dev 10.58, 0.5 gives 10.58, 1.0 gives 10.48; the pinned 0.25 gives 10.25. The scale changes the pixels, but barely changes the floor's contrast, so the scale does not explain the flat ground. Next candidate: the lighting or tint applied to the ground colour (engine shading), checked by a sweep of the ground's colour multiplier. Nothing engine-side was committed.
+`scripts/triplanar_sweep.py` rebuilt the page at three triplanar scales (per metre) and measured the hub ground crop: 0.125 gives std-dev 10.58, 0.5 gives 10.58, 1.0 gives 10.48; the pinned 0.25 gives 10.25. **Invalid, to be re-run.** The sweep ran while ground tiles still took the primitive path, which ignores the texture and `material` and `layer`. The identical values at 0.125 and 0.5 show the sweep measured nothing about the texture. Ground tiles are now on the mesh pass (`feat/ground-mesh`); the sweep is re-run after that change.
 
 ## Done means
 
