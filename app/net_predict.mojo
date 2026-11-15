@@ -354,3 +354,106 @@ def run_predict_coupled(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: 
         run.world_equal_at_end = truth_t.hash() == pred.hash()
     run.blocks = srv.sim.blocked
     return run^
+
+def run_predict_coupled_dr(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: Int) raises -> PredictRun:
+    """One server, NP clients on their own links, and the local predicted sim for player 0. Runs until every client
+    holds tick T and the predicted sim reaches it."""
+    var srv = SnapshotServer[CoupledSim](CoupledSim(NP), 1)  # a snapshot every tick
+    var clients = List[SnapshotClient[CoupledSim]]()
+    var up = List[SimLink]()
+    var down = List[SimLink]()
+    for p in range(NP):
+        clients.append(SnapshotClient[CoupledSim](CoupledSim(NP), p))
+        up.append(SimLink(latency, jitter, loss, seed + UInt64(p) * 7919))
+        down.append(SimLink(latency, jitter, loss, seed + UInt64(p) * 104729 + 1))
+    var pred = CoupledSim(NP)
+    var predicted_hist = List[Int]()  # the predicted x after k steps, at index k
+    predicted_hist.append(pred.x[0])
+    var run = PredictRun()
+    var last_recon = -1  # the newest snapshot tick the predicted sim has been reconciled with
+    var vx = List[Int](length=NP, fill=0)  # remote players' velocity, mm per tick, from the last two snapshots
+    var vz = List[Int](length=NP, fill=0)
+    var prev_tick = -1
+    var prev_x = List[Int](length=NP, fill=0)
+    var prev_z = List[Int](length=NP, fill=0)
+    var f = 0
+    while f < 5000:
+        # the local player's input for this frame, applied to the predicted sim at once
+        if pred.now < T:
+            var ins = List[PlayerInput]()
+            for p in range(NP):
+                ins.append(coupled_walk(p, pred.now) if p == 0 else PlayerInput(pred.now, p, Int8(vx[p] // MM_PER_STEP), Int8(vz[p] // MM_PER_STEP), 0))
+            pred.step(ins)
+            predicted_hist.append(pred.x[0])
+        for p in range(NP):
+            if clients[p].newest < T:
+                clients[p].submit(coupled_walk(p, f))
+        for p in range(NP):
+            up[p].send(f, clients[p].outgoing(NP))
+        for p in range(NP):
+            for m in up[p].deliver(f):
+                srv.receive(p, m)
+        srv.update(min(f + 1, T))
+        for p in range(NP):
+            down[p].send(f, srv.outgoing(p))
+        for p in range(NP):
+            for m in down[p].deliver(f):
+                clients[p].receive(NP, m)
+        # the shown client's newest snapshot, decoded: its x, and the error against the predicted sim at that tick
+        var shown = clients[0].newest
+        var slot = shown % len(clients[0].have) if shown >= 0 else 0
+        var shown_mm = 0
+        if shown >= 0 and clients[0].have[slot] == shown:
+            var truth = CoupledSim(NP)
+            truth.load(clients[0].bytes[slot])
+            shown_mm = truth.x[0]
+            if shown < len(predicted_hist):
+                var err = abs(predicted_hist[shown] - truth.x[0])
+                run.ticks_checked += 1
+                if err > run.worst_predicted_mm:
+                    run.worst_predicted_mm = err
+                if shown >= IDLE_FROM + 60 and err > run.worst_idle_mm:
+                    run.worst_idle_mm = err
+            var lag = abs(pred.x[0] - shown_mm)
+            if lag > run.worst_lag_mm:
+                run.worst_lag_mm = lag
+            # reconcile with each new snapshot: the predicted sim takes the server's state at that tick and replays
+            # this client's own inputs up to the current tick. The other players stay on neutral input in the replay.
+            if shown > last_recon:
+                var target = pred.now
+                var nt = CoupledSim(NP)
+                nt.load(clients[0].bytes[slot])
+                if prev_tick >= 0 and shown > prev_tick:
+                    var dt = shown - prev_tick
+                    for q in range(1, NP):
+                        vx[q] = (nt.x[q] - prev_x[q]) // dt
+                        vz[q] = (nt.z[q] - prev_z[q]) // dt
+                for q in range(NP):
+                    prev_x[q] = nt.x[q]
+                    prev_z[q] = nt.z[q]
+                prev_tick = shown
+                pred.load(clients[0].bytes[slot])
+                for t in range(shown, target):
+                    var replay = List[PlayerInput]()
+                    for p in range(NP):
+                        replay.append(coupled_walk(p, t) if p == 0 else PlayerInput(t, p, Int8(vx[p] // MM_PER_STEP), Int8(vz[p] // MM_PER_STEP), 0))
+                    pred.step(replay)
+                last_recon = shown
+        run.frames.append(PredictFrame(srv.sim.x[0], pred.x[0], shown_mm))
+        var done = True
+        for p in range(NP):
+            if clients[p].newest < T:
+                done = False
+        if done and pred.now >= T:
+            break
+        f += 1
+    # at T, the truth snapshot against the predicted sim: player 0's tick, x and z, and the whole world hash. The other
+    # players are idle from IDLE_FROM on, so the reconciled sim holds their exact state once a snapshot after that arrives.
+    var slot_t = T % len(clients[0].have)
+    if clients[0].have[slot_t] == T:
+        var truth_t = CoupledSim(NP)
+        truth_t.load(clients[0].bytes[slot_t])
+        run.p0_equal_at_end = truth_t.x[0] == pred.x[0] and truth_t.z[0] == pred.z[0] and truth_t.now == pred.now
+        run.world_equal_at_end = truth_t.hash() == pred.hash()
+    run.blocks = srv.sim.blocked
+    return run^

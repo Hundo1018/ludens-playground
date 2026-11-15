@@ -209,3 +209,15 @@ Each captured frame now draws every character's shadow, and the crowd receives s
 - `CoupledSim` (#52) refuses a player 0 move that would bring it within 1 m of another player. Measured natively and on the page: 2 refused moves, worst per-tick predicted error 4200 mm, idle error 0 mm, world hash equal at T.
 - The 750 mm bound from `docs/frontier_plan.md` line 430 is **NOT MET** under coupling (4200 mm). The number stands. The predicted client does not see the other players' inputs, so it misses the bound once their moves affect its own. Meeting the bound would take a design change (the others' inputs or positions reaching the client in time), not a retune.
 
+## Step 8 bound: two predictors under coupling (measured, both reported)
+
+- Neutral remote players (`run_predict_coupled`): worst per-tick error 4200 mm; NOT MET.
+- Dead reckoning for remote players (`run_predict_coupled_dr`): each remote player's velocity taken from the last two snapshots and replayed. Worst per-tick error 3000 mm; NOT MET.
+- Why the bound stays out of reach: a change in a remote player's input reaches the predicted client only after the link's 9 ticks, and player 0's moves are refused by those players' positions. Dead reckoning cannot predict a change it has not yet received, so the error during each change is set by the latency. The 750 mm bound would need that information earlier than the link delivers it. That is a limit of the link, not a tuning issue.
+- The page's netview runs the neutral predictor, so its number (4200 mm) is the one the page shows.
+
+## Step 5 flip on skinned meshes (measured)
+
+- `tests/shadow_skin_native.mojo`: the skinned depth map equals the static map at 8 texels (worst difference 0). The texels include the mirrored ones, (24, 40) and (40, 24), which are open in both maps, and the box texels (40, 40), (37, 37), (43, 43), (38, 42), (42, 38) at depth 0.45.
+- `tests/shadow_flip_native.mojo` (static) puts the same box at texel (40, 40), so the skinned map has the same orientation as the static one, which is checked numerically.
+
