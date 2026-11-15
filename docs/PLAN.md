@@ -153,5 +153,6 @@ Each step: its PR merged, its check green locally from a fresh clone, and the Pa
   - footprint beside the blue box: 52.7 off, 19.8 on
   - the box's lit top face: 125.1 both (no acne on the face the light reaches)
   - an open ground patch: 53.5 off, 53.4 on
-- Not measured: a light-direction flip. The crops were chosen after viewing the frame, so they cannot show a flip. Visually, each shadow meets its caster's base: the box's shadow at its left foot, the left pillar's at its foot, the Fox's under its body. A numeric check of the base contact is still open.
+- Orientation of the shadow map, numeric: `tests/shadow_flip_native.mojo` puts a box at (0.25, -0.25) and reads texel (40, 40) as depth 0.45, with the mirrored texels (24, 40) and (40, 24) open (4 of 4). This checks the map's texel layout against the shader's uv formula, uv = (0.5 + 0.5 x, 0.5 - 0.5 y). The shading side of that formula is not separately tested.
+- Scene check, by eye and not a number: each shadow meets its caster's base: the box's shadow at its left foot, the left pillar's at its foot, the Fox's under its body. The crops for the luminance measurements were chosen after viewing the frame.
 - Test: `tests/mesh_shadow_native.mojo` (native, in `scripts/test_frontier_native.sh`) builds the mesh pass with the shadow bindings and checks `set_shadow`'s argument. It does not render a shadowed pixel.
