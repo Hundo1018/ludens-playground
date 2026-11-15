@@ -99,6 +99,10 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 
 `benchmarks/net_latency_150ms.mojo`: one-way latency 0 to 9 ticks (0 to 150 ms at 60 Hz), 10 % loss, jitter 3, three seeds per row. Every latency converged (3 of 3) and matched the reference hash (3 of 3). Mean frames to finish 120 ticks: 126 at 0 ms, 145 at 116 ms, 148 at 150 ms. This measures convergence and state equality, not the prediction error that the plan's bound refers to. That bound is still unmeasured.
 
+## Step 8: display error of a snapshot client, 0 to 150 ms (native)
+
+Second table of `benchmarks/net_latency_150ms.mojo`, 10 % loss, jitter 3, three seeds per row. Lag is the server tick minus the tick client 0 shows. Mean lag: 1.7 ticks at 0 ms, 8.0 at 50 ms, 10.7 at 150 ms; the maximum is 15 ticks (about 250 ms) at 100, 133 and 150 ms. Target displacement between the shown and the server tick: 1.25 to 2.5 m (mean 1.25 to 2.1 m). This is the display error of a snapshot client, not a prediction error: SnapshotClient does not predict, and RollbackPeer (the prediction seam in ludens-core) is not used. The prediction-error bound is still unmeasured.
+
 ## Done means
 
 Each step: its PR merged, its check green locally from a fresh clone, and the Pages build serving the change.
