@@ -876,7 +876,10 @@ def playground_host_town(app: UInt64, on: Int32) abi("C") -> Int32:
         h[].town = None
         return 0
     try:
-        h[].town = Town()
+        if not h[].world:
+            print("playground_host_town: the Frontier world is not there yet")
+            return -2
+        h[].town = Town(h[].world.value().world.static_boxes(96.0, 96.0, 160.0, 160.0, 1.0))
         return Int32(RESIDENTS)
     except e:
         print("playground_host_town:", e)
