@@ -71,6 +71,8 @@ async function boot() {
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
   // The town (plan stage 3): 24 residents on corner routes and a guard; ?notown leaves it out.
   if (!params.has("notown")) x.playground_host_town(app, 1);
+  // The three-colour netcode view (plan step 8): server truth, predicted and shown, drawn for player 0 on a 150 ms link.
+  if (params.has("netview")) x.playground_host_netview(app, 1, 9, 2, 0);
   if (params.has("notex")) x.playground_host_notex(app, 1); // debug: an untextured comparison frame
   if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
   if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement

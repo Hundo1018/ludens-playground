@@ -54,3 +54,10 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/shadow_pass_native.mojo --target native -o build/shadow_pass_native
 build/shadow_pass_native
+# Step 8 prediction-error bound (docs/frontier_plan.md line 430): a predicted client against the server truth, natively.
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/net_predict_native.mojo --target native -o build/net_predict_native
+build/net_predict_native
