@@ -92,6 +92,9 @@ Run on `main` (`d8a186c`, ground tiles on the mesh pass), with `?offscreen&notow
 - Present in ludens-core only: a rollback and prediction seam (`gameplay/netcode.mojo`, `RollbackPeer`, ROADMAP 17.16). The playground does not use it for a measured prediction error.
 - Absent from the playground: a measured prediction-error bound (the plan's 150 ms check) and the three-colour draw. Neither appears in `app/`, `page/` or `scripts/`.
 
+## Step 5: shadow probe, native (depth through a comparison sampler)
+
+`tests/shadow_probe_native.mojo`: a Depth32Float texture written by a render pass cleared to 0.5, sampled once in a compute shader through a LessEqual comparison sampler at references 0.25 and 0.75. Result: 1.0 and 0.0 (2 of 2 checks). The depth-plus-comparison binding path works through wgpu-mojo natively. The shadow pass itself (light camera, depth pass, PCF in the mesh fragment shader) is not built yet; this is the riskiest unknown, now resolved.
 ## Step 8: netcode latency sweep, 0 to 150 ms (native)
 
 `benchmarks/net_latency_150ms.mojo`: one-way latency 0 to 9 ticks (0 to 150 ms at 60 Hz), 10 % loss, jitter 3, three seeds per row. Every latency converged (3 of 3) and matched the reference hash (3 of 3). Mean frames to finish 120 ticks: 126 at 0 ms, 145 at 116 ms, 148 at 150 ms. This measures convergence and state equality, not the prediction error that the plan's bound refers to. That bound is still unmeasured.
