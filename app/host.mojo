@@ -1384,6 +1384,22 @@ def playground_host_crowd_feed(app: UInt64, ptr: UInt64, n: Int32) abi("C") -> I
 
 
 @export
+def playground_host_town_ai(app: UInt64, which: Int32) abi("C") -> Int32:
+    """Reference baselines D1 and D2: 0 the residents' behavior-tree transitions since the town was switched on, 1 the
+    residents in the watch branch now, 2 whether the guard saw the player on the last tick (1 or 0). -1 without a town."""
+    var h = _host(app)
+    if not h[].town:
+        return -1
+    if which == 0:
+        return Int32(h[].town.value().bt.transitions)
+    if which == 1:
+        return Int32(h[].town.value().watching())
+    if which == 2:
+        return 1 if h[].town.value().guard_sees else 0
+    return -1
+
+
+@export
 def playground_host_contacts(app: UInt64) abi("C") -> Int32:
     """W6: how many times the town's guard has touched the player since the town was switched on."""
     return Int32(_host(app)[].contacts)

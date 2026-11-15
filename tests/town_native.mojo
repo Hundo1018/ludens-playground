@@ -64,4 +64,21 @@ def main() raises:
     s.check(guard60 < guard0, "the guard closes on the still player within 60 ticks: " + String(guard0) + " m -> " + String(guard60) + " m")
     var guard_end = t.guard_distance(player)
     s.check(guard_end < Real(1.0), "the guard reaches a still player within the contact distance (1 m) after 1200 ticks: " + String(guard_end) + " m")
+    # D1: the residents' behavior tree changes actions over the run (walk, next corner, watch)
+    print("behavior tree transitions over 1200 ticks:", t.bt.transitions)
+    s.check(t.bt.transitions > RESIDENTS, "the residents' behavior trees change action over the run: " + String(t.bt.transitions) + " transitions")
+    # D1: a player standing on a resident puts it in the watch branch
+    var tw = Town(boxes)
+    var near_player = tw.crowd.pos[0]
+    for _ in range(5):
+        tw.step(dt, near_player)
+    s.check(tw.watching() >= 1, "a player next to a resident makes it stop and watch: " + String(tw.watching()) + " watching")
+    # D2: the guard's cone and line of sight
+    var tp = Town(boxes)
+    var at = corner(0)
+    var ahead = tp.look(at, Vec3(1.0, 0.0, 0.0, 0.0), at + Vec3(12.0, 0.0, 0.0, 0.0))
+    var behind = tp.look(at, Vec3(1.0, 0.0, 0.0, 0.0), at - Vec3(12.0, 0.0, 0.0, 0.0))
+    print("guard at corner 0 facing +x: player 12 m ahead seen", ahead, "; 12 m behind seen", behind)
+    s.check(ahead, "the guard sees a player 12 m ahead along the street")
+    s.check(not behind, "the guard does not see a player 12 m behind it")
     s.finish()
