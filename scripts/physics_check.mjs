@@ -1,8 +1,8 @@
-// The quarry's fractured wall breaks under a dropped weight (plan W7; the plan's pendulum cannot reach the wall, see the
-// PR). Headless Chrome on a software WebGPU adapter. The fragment numbers come from the Frontier stats 11 (fragments
-// loose), 12 (fragments the wall was cut into) and 14 (fracture events since the start) (frontier/world.mojo).
+// Reference baseline B1 (original stage 2: a destructible wall and a jointed machine). The quarry's fractured wall stands on
+// the ground; when the player comes within 20 m a 2000 kg bob on a 9 m hinge is released level with its pivot and swings into
+// the wall. Headless Chrome on a software WebGPU adapter. Frontier stats: 11 fragments loose, 12 fragments the wall was cut
+// into, 14 fracture events since the start, 16 the bob's z in millimetres (frontier/world.mojo).
 // usage: node scripts/physics_check.mjs <chrome> <url> [timeout_s]
-// Checks: no wall before the player comes near; after the player is 17 m away the wall is released, falls 6 m and breaks.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,14 +38,21 @@ const fragments0 = await stat(12);
 need(fragments0 === 0, `the wall is not there before the player comes near (${fragments0} fragments)`);
 const events0 = await stat(14);
 need(events0 === 0, `no fracture event before the player comes near (${events0})`);
-// the player walks to 18 m from the wall (it is released within 20 m), and the wall falls and breaks
-await js(`window.host.x.playground_host_frontier_teleport(window.host.app, 100, -110)`);  // 18 m from the wall, inside the 20 m release radius
+// the player walks to 18 m from the wall: the wall and the pendulum are added
+await js(`window.host.x.playground_host_frontier_teleport(window.host.app, 100, -110)`);
+let bobZ0 = -1;
+for (let i = 0; i < 80 && bobZ0 === -1; i++) { await sleep(50); bobZ0 = await stat(16); }
+need(bobZ0 !== -1, `the pendulum exists once the player is near (bob z ${bobZ0} mm)`);
+const eventsEarly = await stat(14);
+need(eventsEarly === 0, `the wall stands by itself before the bob reaches it (${eventsEarly} events)`);
 let events = 0;
 for (let i = 0; i < 120 && events === 0; i++) { await sleep(250); events = await stat(14); }
+const bobZ1 = await stat(16);
 const fragments = await stat(12);
-console.log(`after the wall falls: ${events} fracture events; fragments ${fragments}, loose ${await stat(11)}`);
-need(fragments > 1, `the wall is cut into fragments once released (${fragments})`);
-need(events > 0, `the wall falls and breaks: a fracture event (${events})`);
+console.log(`bob z ${bobZ0} -> ${bobZ1} mm; ${events} fracture events; fragments ${fragments}, loose ${await stat(11)}`);
+need(Math.abs(bobZ1 - bobZ0) > 3000, `the bob swings toward the wall (z ${bobZ0} -> ${bobZ1} mm)`);
+need(events > 0, `the bob breaks the wall: a fracture event (${events})`);
+need(fragments > 1, `the wall is cut into fragments (${fragments})`);
 need((await js('window.host.error')) === '', 'no page error');
 console.log(problems.length ? `physics-check: FAIL\n  ${problems.join('\n  ')}` : 'physics-check: PASS');
 done(problems.length ? 1 : 0);

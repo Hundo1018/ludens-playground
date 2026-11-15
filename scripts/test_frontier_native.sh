@@ -47,6 +47,13 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/quarry_native.mojo --target native -o build/quarry_native
 build/quarry_native
+# B1: a 2000 kg pendulum on a hinge breaks the standing wall; the wall alone does not break
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/pendulum_native.mojo --target native -o build/pendulum_native
+build/pendulum_native
 # step 7 (crowd): ecs entities moved by the flow field; the two backends agree; a switch keeps the crowd
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
