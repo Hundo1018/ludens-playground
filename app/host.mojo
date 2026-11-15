@@ -558,7 +558,7 @@ def playground_host_netview(app: UInt64, on: Int32, latency: Int32, jitter: Int3
 def playground_host_netview_stat(app: UInt64, which: Int32) abi("C") -> Int32:
     """Step 8: the last netview run, in millimetres. 0 the worst per-tick predicted error, 1 the worst error after the
     idle window, 2 the worst lag of the shown client behind the predicted sim, 3 the snapshot ticks compared, 4 1 when
-    player 0 equals the truth at T. Returns -1 when no run exists, -2 for an unknown stat."""
+    player 0 equals the truth at T, 5 1 when the whole world hash equals the server's at T. Returns -1 when no run exists, -2 for an unknown stat."""
     var h = _host(app)
     if not h[].net_run:
         return -1
@@ -572,6 +572,8 @@ def playground_host_netview_stat(app: UInt64, which: Int32) abi("C") -> Int32:
         return Int32(h[].net_run.value().ticks_checked)
     if which == 4:
         return Int32(1) if h[].net_run.value().p0_equal_at_end else Int32(0)
+    if which == 5:
+        return Int32(1) if h[].net_run.value().world_equal_at_end else Int32(0)
     return -2
 
 

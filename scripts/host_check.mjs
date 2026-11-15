@@ -123,6 +123,8 @@ need(nvPred >= 0 && nvPred < 750, `netview: predicted within 750 mm of the serve
 need(nvIdle >= 0 && nvIdle < 10, `netview: predicted within 10 mm after the idle window (${nvIdle} mm)`);
 need(nvLag > 500, `netview: the shown client trails the predicted sim by over 500 mm (${nvLag} mm)`);
 need(nvEq === 1, 'netview: player 0 equals the server at T');
+const nvWorld = await js('window.host.x.playground_host_netview_stat(window.host.app, 5)');
+need(nvWorld === 1, 'netview: the predicted world hash equals the server at T');
 await js('window.host.x.playground_host_netview(window.host.app, 0, 0, 0, 0)');
 // B3 (design 1.10): every vertex, GPU against CPU, below 1e-3 m. CesiumMan clip 0 at frames 0, 15, 30, 45, 60 and the
 // Fox's Walk at 0, 11, 22. The Fox's units are centimetres; the host scales its differences to metres.

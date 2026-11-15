@@ -50,6 +50,7 @@ struct PredictRun(Movable):
     var worst_idle_mm: Int  # the same, over ticks from IDLE_FROM + 60 on
     var worst_lag_mm: Int  # max over frames of |predicted now - shown|
     var p0_equal_at_end: Bool  # player 0's tick, x and z equal the truth at T
+    var world_equal_at_end: Bool  # the whole world hash of the predicted sim equals the server's at T
 
     def __init__(out self):
         self.frames = List[PredictFrame]()
@@ -58,6 +59,7 @@ struct PredictRun(Movable):
         self.worst_idle_mm = 0
         self.worst_lag_mm = 0
         self.p0_equal_at_end = False
+        self.world_equal_at_end = False
 
 
 def run_predict(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: Int) raises -> PredictRun:
@@ -75,6 +77,7 @@ def run_predict(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: Int) rai
     var predicted_hist = List[Int]()  # the predicted x after k steps, at index k
     predicted_hist.append(pred.x[0])
     var run = PredictRun()
+    var last_recon = -1  # the newest snapshot tick the predicted sim has been reconciled with
     var f = 0
     while f < 5000:
         # the local player's input for this frame, applied to the predicted sim at once
@@ -116,6 +119,17 @@ def run_predict(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: Int) rai
             var lag = abs(pred.x[0] - shown_mm)
             if lag > run.worst_lag_mm:
                 run.worst_lag_mm = lag
+            # reconcile with each new snapshot: the predicted sim takes the server's state at that tick and replays
+            # this client's own inputs up to the current tick. The other players stay on neutral input in the replay.
+            if shown > last_recon:
+                var target = pred.now
+                pred.load(clients[0].bytes[slot])
+                for t in range(shown, target):
+                    var replay = List[PlayerInput]()
+                    for p in range(NP):
+                        replay.append(walk(p, t) if p == 0 else PlayerInput.neutral(t, p))
+                    pred.step(replay)
+                last_recon = shown
         run.frames.append(PredictFrame(srv.sim.x[0], pred.x[0], shown_mm))
         var done = True
         for p in range(NP):
@@ -124,11 +138,12 @@ def run_predict(latency: Int, jitter: Int, loss: Real, seed: UInt64, T: Int) rai
         if done and pred.now >= T:
             break
         f += 1
-    # at T, player 0 against the truth snapshot at T: the same tick, x and z. The world hash is not compared: the
-    # predicted sim steps players 1 and 2 with neutral input (it does not know their inputs), so their state differs.
+    # at T, the truth snapshot against the predicted sim: player 0's tick, x and z, and the whole world hash. The other
+    # players are idle from IDLE_FROM on, so the reconciled sim holds their exact state once a snapshot after that arrives.
     var slot_t = T % len(clients[0].have)
     if clients[0].have[slot_t] == T:
         var truth_t = FrontierSim(NP)
         truth_t.load(clients[0].bytes[slot_t])
         run.p0_equal_at_end = truth_t.x[0] == pred.x[0] and truth_t.z[0] == pred.z[0] and truth_t.now == pred.now
+        run.world_equal_at_end = truth_t.hash() == pred.hash()
     return run^
