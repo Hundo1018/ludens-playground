@@ -24,6 +24,7 @@ async function loadAssets(rt, x, app) {
     return r.json();
   });
   for (const [name, meta] of Object.entries(index)) {
+    if (name.endsWith(".lsound")) continue; // sounds go to the audio scene (loadSounds)
     const kind = ASSET_KIND[name];
     if (kind === undefined) throw new Error("no host kind for asset " + name);
     const url = new URL("./assets/" + name, location.href).href; // loadAsset takes an http(s) URL
@@ -65,6 +66,75 @@ function crowdWorkerFrame() {
     try { x.playground_host_crowd_feed(app, BigInt(s.ptr), n); } finally { s.free(); }
     stats.crowdRows = (stats.crowdRows || 0) + 1;
   }).catch((e) => { stats.error = "crowd worker: " + String(e); }).finally(() => { crowdWorker.busy = false; });
+}
+// W8: the four sounds. Each .lsound (scripts/convert_wav.py: "LSND", version, header length, JSON header, int16 mono
+// frames) is decoded to stereo f32 and registered on the host's audio scene. The first is the menu select, the second the
+// coin cluster, which plays when a zone goal is reached (GOAL_SOUND).
+const SOUNDS = ["sfx_menu_select1.lsound", "sfx_coin_cluster1.lsound", "sfx_damage_hit1.lsound", "sfx_sounds_powerup1.lsound"];
+const GOAL_SOUND = 1;
+function lsoundToStereo(bytes) {
+  const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+  if (magic !== "LSND") throw new Error("not an .lsound file");
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const off = 12 + dv.getUint32(8, true);
+  const n = (bytes.byteLength - off) >> 1;
+  const out = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const v = dv.getInt16(off + 2 * i, true) / 32768;
+    out[2 * i] = v;
+    out[2 * i + 1] = v;
+  }
+  return out;
+}
+async function loadSounds(rt, x, app, index) {
+  if (x.playground_host_audio_init(app) !== 0) throw new Error("playground_host_audio_init failed");
+  const ids = [];
+  for (const name of SOUNDS) {
+    const meta = index[name];
+    if (!meta) throw new Error("sound missing from assets/index.json: " + name);
+    const url = new URL("./assets/" + name, location.href).href;
+    const bytes = await loadAsset(url, meta.sha256, { maxBytes: 4 * 1024 * 1024 });
+    const pcm = lsoundToStereo(bytes);
+    const s = stageAsset(rt, new Uint8Array(pcm.buffer));
+    let id;
+    try { id = x.playground_host_audio_clip(app, BigInt(s.ptr), pcm.length / 2); } finally { s.free(); }
+    if (id < 0) throw new Error("playground_host_audio_clip failed for " + name);
+    ids.push(id);
+    stats.sounds = (stats.sounds || 0) + 1;
+  }
+  x.playground_host_audio_goal(app, ids[GOAL_SOUND]);
+}
+
+// W8: the audio context starts on the first key or pointer event (browsers allow sound only after a gesture). The worklet
+// asks for blocks; the page renders them from the host's mix and posts them back (the page has no SharedArrayBuffer).
+let audioStarted = false;
+async function ensureAudio(rt, x, app) {
+  if (audioStarted) return;
+  audioStarted = true;
+  const ctx = new AudioContext({ sampleRate: 48000 });
+  await ctx.audioWorklet.addModule("./worklet.js");
+  const node = new AudioWorkletNode(ctx, "ring-player", { outputChannelCount: [2], processorOptions: { capacity: 8192 } });
+  const BLOCK = 128, TARGET = 4096;
+  const scratch = rt.alloc(BLOCK * 2 * 4);
+  let sent = 0;
+  const topUp = (played) => {
+    const blocks = Math.floor((TARGET - (sent - played)) / BLOCK);
+    if (blocks <= 0) return;
+    const out = new Float32Array(blocks * BLOCK * 2);
+    for (let b = 0; b < blocks; b++) {
+      if (x.playground_host_audio_render(app, BigInt(scratch), BLOCK) !== 0) throw new Error("playground_host_audio_render failed");
+      out.set(rt.f32(scratch, BLOCK * 2), b * BLOCK * 2);
+    }
+    sent += blocks * BLOCK;
+    node.port.postMessage(out, [out.buffer]);
+  };
+  node.port.onmessage = (e) => {
+    try { stats.audioPlayed = e.data.played; stats.audioUnderruns = e.data.underruns; topUp(e.data.played); } catch (err) { stats.error = String(err); }
+  };
+  node.connect(ctx.destination);
+  topUp(0);
+  stats.audioCtx = ctx;
+  await ctx.resume();
 }
 
 // GLFW codes for the keys the Frontier uses (the same numbers the engine's keys table gives).
@@ -118,6 +188,7 @@ async function boot() {
   });
   canvas.addEventListener("pointerdown", (e) => {
     if (isTouch(e)) return;
+    ensureAudio(rt, x, app).catch((err) => { stats.error = "audio: " + String(err); });
     send(EV_CURSOR_POS, 0, 0, 0, e.offsetX, e.offsetY); // the press point is where the cursor is: no jump into the drag
     vx = e.offsetX; vy = e.offsetY;
     send(EV_MOUSE_BUTTON, DOM_TO_GLFW[e.button] ?? 0, ACTION_PRESS, 0, e.offsetX, e.offsetY);
@@ -130,7 +201,10 @@ async function boot() {
   canvas.addEventListener("pointercancel", pointerUp);
   // The pad shows itself on a coarse pointer (a phone); ?pad forces it on, for the headless touch check.
   stats.pad = mountVirtualPad(canvas, PAD, { key: padKey, look: padLook, lookEnd: padLookEnd }, params.has("pad"));
-  loadAssets(rt, x, app).catch((e) => { stats.error = "assets: " + String(e); });
+  loadAssets(rt, x, app).then(async () => {
+    const index = await fetch("./assets/index.json").then((r) => r.json());
+    await loadSounds(rt, x, app, index);
+  }).catch((e) => { stats.error = "assets: " + String(e); });
   if (params.has("offscreen")) x.playground_host_offscreen(app, 1); // headless checks: never draw to the canvas
   // The town (plan stage 3): 24 residents on corner routes and a guard; ?notown leaves it out.
   if (!params.has("notown")) x.playground_host_town(app, 1);
@@ -188,7 +262,7 @@ async function boot() {
     if (code === 32 || (code >= 262 && code <= 265)) e.preventDefault();
     x.playground_host_input(app, EV_KEY, code, action === ACTION_PRESS && e.repeat ? ACTION_REPEAT : action, 0, 0, 0);
   };
-  addEventListener("keydown", (e) => key(e, ACTION_PRESS));
+  addEventListener("keydown", (e) => { key(e, ACTION_PRESS); ensureAudio(rt, x, app).catch((err) => { stats.error = "audio: " + String(err); }); });
   addEventListener("keyup", (e) => key(e, ACTION_RELEASE));
   addEventListener("blur", () => x.playground_host_release_input(app));
 
