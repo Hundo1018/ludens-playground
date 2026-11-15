@@ -12,6 +12,7 @@ from hud import Hud
 from render3d import ArenaRenderer
 from app.mesh_pass import MeshRegistry, unit_cube_arrays
 from app.shadow_pass import ShadowPass
+from app.ao_grid import ao_grid, AO_N, AO_X0, AO_SIZE
 from std.math import sqrt
 from app.net_predict import PredictRun, run_predict_coupled, PREDICT_T, PREDICT_SEED
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
@@ -119,6 +120,8 @@ struct Host(Movable):
     var palette_used: Int  # matrices in the last frame's skinned palette
     var shadow: Optional[ShadowPass]  # the sun's depth pass into the mesh pass's shadow map; made on the first shadowed frame
     var shadow_on: Bool  # ?noshadow turns the shadow factor and its pass off; on by default
+    var ao_on: Bool  # ?noao turns the ambient-occlusion term off; on by default (W10)
+    var ao_done: Bool  # the AO grid was filled by the GPU trace and set on the mesh pass (once, on the first frame)
     var net_run: Optional[PredictRun]  # step 8: the three-colour netcode run for player 0 (server, predicted, shown)
     var net_on: Bool  # the markers are drawn while on
     var net_frame: Int  # the frame counter that steps through the run, one run frame per draw
@@ -168,6 +171,8 @@ struct Host(Movable):
         self.palette_used = 0
         self.shadow = None
         self.shadow_on = True
+        self.ao_on = True
+        self.ao_done = False
         self.net_run = None
         self.net_on = False
         self.net_frame = 0
@@ -214,6 +219,8 @@ struct Host(Movable):
         self.tex_job = move.tex_job^
         self.shadow = move.shadow^
         self.shadow_on = move.shadow_on
+        self.ao_on = move.ao_on
+        self.ao_done = move.ao_done
         self.b3_job = move.b3_job^
         self.palette_dropped = move.palette_dropped
         self.palette_used = move.palette_used
@@ -256,6 +263,10 @@ struct Host(Movable):
         # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
         var light = _light_vp()
         self.renderer.value().mesh.set_shadow(self.boot.device(), light, self.shadow_on)
+        if self.ao_on and not self.ao_done:  # W10: the floor's occlusion, traced on the GPU over the pillars once
+            var cells = ao_grid(m.world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0))
+            self.renderer.value().mesh.set_ao(self.boot.device(), cells, AO_N, AO_N, AO_X0, AO_X0, AO_SIZE, AO_SIZE, True)
+            self.ao_done = True
         if self.shadow_on:
             if not self.shadow:
                 self.shadow = ShadowPass(self.boot.device(), WGPUTextureFormat.Depth32Float)
@@ -577,6 +588,12 @@ def _light_vp() -> List[Float32]:
     # column 3: the translation that maps the depth range [-30, 30] to [0, 1]
     m.append(0.0); m.append(0.0); m.append(0.5); m.append(1.0)
     return m^
+
+
+@export
+def playground_host_ao(app: UInt64, on: Int32) abi("C"):
+    """The ambient-occlusion term (W10): on by default, off for ?noao. Set before the first frame it takes effect at once."""
+    _host(app)[].ao_on = on != 0
 
 
 @export
