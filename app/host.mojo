@@ -388,9 +388,11 @@ struct Host(Movable):
         # the town (plan stage 3): 24 residents and the guard, each a CesiumMan at its ORCA position, its clip phase spread
         var town_rows = List[Vec3]()
         var town_bases = List[Int]()
+        var town_guard = -1  # W6: the guard's row, drawn in a distinct colour
         if self.town:
             var tn = self.town.take()
             tn.step(Real(1.0 / 60.0), player)
+            town_guard = tn.guard
             if tn.guard_distance(player) < CONTACT_R:
                 self.contacts += 1
                 self.reset_player = True
@@ -451,7 +453,8 @@ struct Host(Movable):
             var pos = Vec3(tp[0], Real(0.0), tp[2], Real(0.0))
             self.renderer.value().push(DrawItem(
                 -1, pos, 0.0, 0.0, 0.0, 1.0,
-                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
+                Vec3(Real(0.85), Real(0.12), Real(0.1), Real(0.0)) if k == town_guard else Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
                 self.skin_cesium, town_bases[k], 0,
             ))
 
