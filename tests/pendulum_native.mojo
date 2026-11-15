@@ -1,7 +1,7 @@
 # Reference baseline B1 (original stage 2: a destructible wall and a jointed machine): a pendulum on a hinge swings into the
 # quarry's fractured wall, which stands on the ground. Scenario A, the wall alone, makes no fracture event. Scenario B, a
 # bob of mass M released level with the pivot, 9 m from it, hits the wall at the bottom of its swing. Measured: a 500 kg bob
-# does not break it (0 events); a 2000 kg bob, a wrecking ball, does (thousands of events). The page uses 2000 kg.
+# does not break it (0 events); a 2000 kg bob, a wrecking ball, does (22 events, counted per tick). The page uses 2000 kg.
 from std.math import sqrt
 from harness.runner import Suite
 from geometry.vec import Real, Vec3
@@ -18,8 +18,9 @@ def wall_world() raises -> EmbedWorld:
 def run(mut w: EmbedWorld, ticks: Int) raises -> Int:
     var events = 0
     for _ in range(ticks):
+        var before = len(w.frame_fracture)  # the list grows tick by tick; only ticks_due clears it
         w.physics_tick()
-        events += len(w.frame_fracture)
+        events += len(w.frame_fracture) - before
     return events
 
 

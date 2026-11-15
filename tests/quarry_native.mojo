@@ -12,8 +12,9 @@ from physics.rigid6 import QuatBody6, Inertia3
 def run(mut w: EmbedWorld, ticks: Int) raises -> Int:
     var events = 0
     for _ in range(ticks):
+        var before = len(w.frame_fracture)  # the list grows tick by tick; only ticks_due clears it
         w.physics_tick()
-        events += len(w.frame_fracture)
+        events += len(w.frame_fracture) - before
     return events
 
 

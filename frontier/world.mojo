@@ -762,6 +762,8 @@ struct Frontier(Movable):
             var fl = self.flag.take()
             fl.step(self.flag_scene, DT, G)
             self.flag = fl^
+        # frame_fracture is cleared by ticks_due once per frame and grows with each tick: count this tick's records only
+        var before = len(self.world.frame_fracture)
         self.world.physics_tick()
-        self.fracture_events += len(self.world.frame_fracture)
+        self.fracture_events += len(self.world.frame_fracture) - before
         self._check_goals()
