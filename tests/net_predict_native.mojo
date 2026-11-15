@@ -8,7 +8,7 @@ shooter saw it hits, and the same shot at the server's current tick misses (run_
 The measured numbers are printed, not tuned to the bound.
 """
 from harness.runner import Suite
-from app.net_predict import run_predict, run_predict_coupled, PREDICT_T, PREDICT_SEED
+from app.net_predict import run_predict, run_predict_coupled, run_predict_coupled_dr, PREDICT_T, PREDICT_SEED
 from app.net_frontier import run_shot_session
 from geometry.vec import Real
 
@@ -37,6 +37,13 @@ def main() raises:
     s.check(c.worst_idle_mm < 10, "coupled error under 10 mm after 60 idle ticks (got " + String(c.worst_idle_mm) + ")")
     s.check(c.world_equal_at_end, "coupled: the world hash equals the server's at T")
     s.check(c.p0_equal_at_end, "coupled: player 0 equals the server at T")
+    # the same coupled run with dead reckoning for the remote players: their velocity from the last two snapshots
+    var d = run_predict_coupled_dr(9, 2, Real(0.0), PREDICT_SEED, PREDICT_T)
+    print("coupled, dead reckoning: refused moves", d.blocks, " worst per-tick error (mm)", d.worst_predicted_mm, " after idle (mm)", d.worst_idle_mm)
+    var dverdict = "MET" if d.worst_predicted_mm < 750 else "NOT MET"
+    print("coupled, dead reckoning: 750 mm bound", dverdict, "at", d.worst_predicted_mm, "mm")
+    s.check(d.worst_idle_mm < 10, "dead reckoning: error under 10 mm after 60 idle ticks (got " + String(d.worst_idle_mm) + ")")
+    s.check(d.world_equal_at_end, "dead reckoning: the world hash equals the server's at T")
     var shot = run_shot_session(9, 2, Real(0.0), PREDICT_SEED, PREDICT_T)
     print("shot at 9 ticks: found", shot.found, "shooter sees tick", shot.seen, "server at", shot.now)
     s.check(shot.found, "a shot frame exists at 9 ticks: the shooter sees an older tick and the target has moved")
