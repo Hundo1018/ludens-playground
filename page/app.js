@@ -35,6 +35,37 @@ async function loadAssets(rt, x, app) {
   }
 }
 
+// W11: the crowd in a Worker. The page sends the pillar boxes once; each frame it asks the worker for one step and its rows,
+// and feeds the rows to the host (playground_host_crowd_feed). One request at a time: a frame with no reply reuses the last rows.
+let crowdWorker = null;
+async function startCrowdWorker(rt, x, app, n) {
+  const cnt = x.playground_host_pillar_count(app);
+  const boxes = [];
+  for (let i = 0; i < cnt; i++) for (let k = 0; k < 6; k++) boxes.push(x.playground_host_pillar(app, i, k));
+  const w = new Worker("./crowd.worker.mjs", { type: "module" });
+  let nextId = 1;
+  const pending = new Map();
+  w.onmessage = (e) => { const r = pending.get(e.data.id); if (r) { pending.delete(e.data.id); r(e.data); } };
+  const call = (msg, transfer) => new Promise((resolve) => { const id = nextId++; pending.set(id, resolve); w.postMessage({ ...msg, id }, transfer || []); });
+  const init = await call({ op: "init", n, boxes });
+  if (!init.ok) throw new Error("crowd worker: " + init.error);
+  x.playground_host_crowd_ext(app, 1);
+  crowdWorker = { call, busy: false, n, rt, x, app };
+  stats.crowdWorker = true;
+}
+function crowdWorkerFrame() {
+  if (!crowdWorker || crowdWorker.busy) return;
+  const { call, rt, x, app, n } = crowdWorker;
+  crowdWorker.busy = true;
+  call({ op: "run", ticks: 1 }).then(() => call({ op: "rows" })).then((r) => {
+    if (!r.ok) throw new Error("crowd worker rows: " + r.error);
+    const f = new Float32Array(r.rows);
+    const s = stageAsset(rt, new Uint8Array(f.buffer));
+    try { x.playground_host_crowd_feed(app, BigInt(s.ptr), n); } finally { s.free(); }
+    stats.crowdRows = (stats.crowdRows || 0) + 1;
+  }).catch((e) => { stats.error = "crowd worker: " + String(e); }).finally(() => { crowdWorker.busy = false; });
+}
+
 // GLFW codes for the keys the Frontier uses (the same numbers the engine's keys table gives).
 const KEYS = { KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68, Space: 32, KeyP: 80, KeyR: 82, Escape: 256,
                ArrowRight: 262, ArrowLeft: 263, ArrowDown: 264, ArrowUp: 265 };
@@ -109,7 +140,9 @@ async function boot() {
   if (params.has("notex")) x.playground_host_notex(app, 1); // debug: an untextured comparison frame
   if (params.has("bench")) x.playground_host_bench_draw(app, 1); // step 7 timing: draw every frame into the target
   if (params.has("crowd")) x.playground_host_crowd(app, Number(params.get("crowd"))); // step 7 measurement
-  // the HUD's netcode check (step 8): the lossy session (latency 4, jitter 3, 10 % loss) on the page's wasm, shown as
+  // W11: ?crowdworker takes the crowd's stepping off the page: a Worker (crowd.worker.mjs, crowd/crowd.wasm) steps it and
+  // the page draws the rows it sends back. Without it the page steps the crowd itself.
+  if (params.has("crowd") && params.has("crowdworker")) await startCrowdWorker(rt, x, app, Number(params.get("crowd")));  // the HUD's netcode check (step 8): the lossy session (latency 4, jitter 3, 10 % loss) on the page's wasm, shown as
   // text. The value is the reference hash (mod 1000000007); native prints the same. -1 would mean a peer did not converge.
   const netBtn = document.getElementById("net");
   const sliders = [["lat", "latv", 1], ["jit", "jitv", 1], ["los", "losv", 1]];
@@ -155,6 +188,7 @@ async function boot() {
     try {
       const dt = Math.min(Math.max((now - last) / 1000, 0), 0.1); last = now;
       const t0 = performance.now();
+      crowdWorkerFrame();
       const r = x.playground_host_frame(app, dt);
       stats.frameMs = performance.now() - t0;
       x.playground_host_set_frame_ms(app, stats.frameMs);

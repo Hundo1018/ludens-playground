@@ -110,6 +110,8 @@ struct Host(Movable):
     var skin_fox: Int
     var wall_mesh: Int  # the unit cube on the mesh pass, for the taller scenery (walls, boxes); -1 until registered
     var crowd: Optional[CrowdState]  # the crowd of step 7 (ecs entities, flow field), None until asked for
+    var crowd_ext: Bool  # W11: the crowd's rows come from the worker (playground_host_crowd_feed); the page does not step it
+    var ext_rows: List[CrowdRow]  # W11: the worker's rows for this frame
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
@@ -158,6 +160,8 @@ struct Host(Movable):
         self.wall_mesh = -1
         self.crowd = None
         self.town = None
+        self.crowd_ext = False
+        self.ext_rows = List[CrowdRow]()
         self.tex_job = None
         self.b3_job = None
         self.palette_dropped = 0
@@ -204,6 +208,8 @@ struct Host(Movable):
         self.skin_fox = move.skin_fox
         self.wall_mesh = move.wall_mesh
         self.crowd = move.crowd^
+        self.crowd_ext = move.crowd_ext
+        self.ext_rows = move.ext_rows.copy()
         self.town = move.town^
         self.tex_job = move.tex_job^
         self.shadow = move.shadow^
@@ -330,10 +336,13 @@ struct Host(Movable):
         var crowd_rows = List[CrowdRow]()
         var crowd_bases = List[Int]()
         if self.crowd:
-            var cs = self.crowd.take()
-            cs.step(Real(1.0 / 60.0))
-            crowd_rows = cs.positions()
-            self.crowd = cs^
+            if self.crowd_ext:
+                crowd_rows = self.ext_rows.copy()
+            else:
+                var cs = self.crowd.take()
+                cs.step(Real(1.0 / 60.0))
+                crowd_rows = cs.positions()
+                self.crowd = cs^
             # the palette holds PALETTE_MATRICES matrices. A member that would not fit is dropped with the rest after
             # it (the newest entries), and the count is kept in palette_dropped: the frame still draws.
             for k in range(len(crowd_rows)):
@@ -1174,3 +1183,26 @@ def playground_host_pillar(app: UInt64, i: Int32, k: Int32) abi("C") -> Float64:
     if k < 3:
         return Float64(b.c[Int(k)])
     return Float64(b.h[Int(k) - 3])
+
+
+@export
+def playground_host_crowd_ext(app: UInt64, on: Int32) abi("C") -> Int32:
+    """W11: the crowd's rows come from the worker (on=1) or from the page's own step (on=0). Returns 0, or -1 without a crowd."""
+    var h = _host(app)
+    if not h[].crowd:
+        return -1
+    h[].crowd_ext = on != 0
+    return 0
+
+
+@export
+def playground_host_crowd_feed(app: UInt64, ptr: UInt64, n: Int32) abi("C") -> Int32:
+    """W11: the worker's rows for this frame: n members, 4 f32 each (x, z, offset, goal) at wasm address ptr. 0, or -1."""
+    var h = _host(app)
+    var src = Pointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(ptr))
+    var rows = List[CrowdRow]()
+    for i in range(Int(n)):
+        rows.append(CrowdRow(Real(Float64(src.unsafe_offset(4 * i)[])), Real(Float64(src.unsafe_offset(4 * i + 1)[])),
+                             Int(src.unsafe_offset(4 * i + 2)[]), Int(src.unsafe_offset(4 * i + 3)[])))
+    h[].ext_rows = rows^
+    return 0
