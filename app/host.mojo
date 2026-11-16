@@ -22,6 +22,7 @@ from app.skin_pass import CpuSkinning, Skinning
 from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame, pose_palette_clip
 from motion_match import build_match, m6_hash, _track as motion_track
 from app.town_motion import TownMotion
+from app.town_blend import TownBlend
 from app.foot_ik import foot_ik, Slope
 from app.rag_skin import rag_palette, pose_mat, placement
 from geometry.mat import Mat4
@@ -125,6 +126,7 @@ struct Host(Movable):
     var ext_rows: List[CrowdRow]  # W11: the worker's rows for this frame
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var town_motion: Optional[TownMotion]  # E1: the town's characters' clips by motion matching on their velocity
+    var town_blend: Optional[TownBlend]  # A5: their poses and yaw blended across switches and loop wraps
     var ik_worst_um: Int  # E2: the worst foot error on the hub's ramp with foot IK, micrometres, since the start
     var ik_raw_um: Int  # E2: the same without IK
     var ik_frames: Int
@@ -205,6 +207,7 @@ struct Host(Movable):
         self.crowd = None
         self.town = None
         self.town_motion = None
+        self.town_blend = None
         self.ik_worst_um = 0
         self.ik_raw_um = 0
         self.ik_frames = 0
@@ -291,6 +294,7 @@ struct Host(Movable):
         self.ext_rows = move.ext_rows.copy()
         self.town = move.town^
         self.town_motion = move.town_motion^
+        self.town_blend = move.town_blend^
         self.ik_worst_um = move.ik_worst_um
         self.ik_raw_um = move.ik_raw_um
         self.ik_frames = move.ik_frames
@@ -601,8 +605,9 @@ struct Host(Movable):
                 town_bases.append(len(pal) // 16)
                 if self.town_motion:
                     ref tm = self.town_motion.value()
-                    pal.extend(pose_palette_clip(c, c.motion[tm.kind(k)], tm.frame_index(k)))
-                    town_yaw.append(Float64(tm.yaw(k)))
+                    ref tb = self.town_blend.value()
+                    pal.extend(tb.palette(k, tm, c))
+                    town_yaw.append(Float64(tb.drawn_yaw(k, tm)))
                 else:
                     var fr = (Int(self.clock * Float64(c.fps)) + 7 * k) % c.frames
                     pal.extend(pose_palette_frame(c, fr))
@@ -779,8 +784,10 @@ struct Host(Movable):
         # E1: each character's clip and frame by motion matching on its velocity (built once CesiumMan is on the page)
         if not self.town_motion and self.cesium and len(self.cesium.value().motion) > 0:
             self.town_motion = TownMotion(self.cesium.value(), len(tn.crowd.pos))
+            self.town_blend = TownBlend(self.cesium.value().joint_count, len(tn.crowd.pos))
         if self.town_motion:
             self.town_motion.value().step(Real(1.0 / 60.0), tn.crowd.vel)
+            self.town_blend.value().update(self.town_motion.value(), self.cesium.value(), Real(1.0 / 60.0))
         if tn.guard_distance(player) < CONTACT_R:
             self.contacts += 1
             self.reset_player = True
