@@ -10,12 +10,15 @@ from ui.draw import DrawList
 
 struct FrontierMode(GameMode):
     var world: Frontier
+    var hud_extra: List[String]  # lines the host adds to the status box (ludens-engine#72), e.g. a renderer setting
 
     def __init__(out self) raises:
         self.world = Frontier()
+        self.hud_extra = List[String]()
 
     def __init__(out self, *, deinit move: Self):
         self.world = move.world^
+        self.hud_extra = move.hud_extra^
 
     def step(mut self, intent: Intent, frame_dt: Float64) raises:
         self.world.update(intent, frame_dt)
@@ -30,7 +33,7 @@ struct FrontierMode(GameMode):
         return List[Int]()
 
     def hud(self, width: Float32, height: Float32, frame_ms: Float32) raises -> DrawList:
-        return build_frontier_hud(self.world, width, height, frame_ms)
+        return build_frontier_hud(self.world, width, height, frame_ms, self.hud_extra)
 
     def hash(self) -> UInt64:
         return self.world.hash()

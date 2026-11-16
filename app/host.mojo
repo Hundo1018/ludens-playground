@@ -12,7 +12,8 @@ from scene import Scene
 from hud import Hud
 from render3d import ArenaRenderer
 from app.shadow_pass import ShadowPass
-from app.ao_grid import ao_grid, AO_N, AO_X0, AO_SIZE
+from app.ao_bake import ao_bake
+from app.hub_ao import hub_ao_boxes, AO_N, AO_X0, AO_SIZE
 from std.math import sqrt
 from app.net_predict import PredictRun, run_predict_coupled, PREDICT_T, PREDICT_SEED
 from app.net_fracture import FractureNetResult, run_fracture_session
@@ -385,9 +386,9 @@ struct Host(Movable):
         var light = _light_vp()
         self.renderer.value().mesh.set_shadow(self.boot.device(), light, self.shadow_on)
         if self.ao_on and not self.ao_done:  # W10: the floor's occlusion, traced on the GPU over the pillars once
-            var cells = ao_grid(m.world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0))
+            var cells = ao_bake(hub_ao_boxes(m.world), AO_N, AO_X0, AO_X0, AO_SIZE)  # ludens-engine#79
             self.renderer.value().mesh.set_ao(self.boot.device(), cells, AO_N, AO_N, AO_X0, AO_X0, AO_SIZE, AO_SIZE, True)
-            m.world.ao = True  # the HUD names the term (W10)
+            m.hud_extra = ["SOFTWARE RAY-TRACED AO"]  # the HUD names the term (W10; a host line, ludens-engine#72)
             self.ao_done = True
         if self.shadow_on:
             if not self.shadow:

@@ -11,7 +11,7 @@ from ui.font import draw_text, text_width
 from ui.geom import Rect
 
 
-def build_frontier_hud(f: Frontier, width: Float32, height: Float32, frame_ms: Float32) raises -> DrawList:
+def build_frontier_hud(f: Frontier, width: Float32, height: Float32, frame_ms: Float32, extra: List[String] = List[String]()) raises -> DrawList:
     """`frame_ms` is the CPU time the page measured around the previous frame (0 when it has not said).
     The streaming counters are shown only with `?debug` (f.debug); a visitor sees the zone and the frame time."""
     var dl = DrawList()
@@ -25,8 +25,8 @@ def build_frontier_hud(f: Frontier, width: Float32, height: Float32, frame_ms: F
         lines.append("BODIES " + String(f.stat(STAT_BODIES_LIVE)) + "/" + String(f.stat(STAT_BODIES_TOTAL)))
         lines.append("DRAWN " + String(f.stat(STAT_DRAWN)) + " CULLED " + String(f.stat(STAT_CULLED)))
         lines.append("LOADS " + String(f.stat(STAT_LOADS)) + " UNLOADS " + String(f.stat(STAT_UNLOADS)))
-    if f.ao:
-        lines.append("SOFTWARE RAY-TRACED AO")
+    for l in extra:  # the host's lines (ludens-engine#72)
+        lines.append(l)
     var tenths = Int(frame_ms * 10.0)
     lines.append("FRAME " + String(tenths // 10) + "." + String(tenths % 10) + " MS")
     var pw = Float32(0)
