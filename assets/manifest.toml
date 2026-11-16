@@ -126,52 +126,6 @@ source_page = "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Mode
 changes = "converted by ludens-engine's scripts/assets/convert_glb.py to the playground's v2 format: geometry, skin, animation samples, root transform and rest-pose data; textures and materials not carried over"
 
 [[asset]]
-id = "motion_cmu_01_01"
-kind = "motion"
-url = "http://mocap.cs.cmu.edu/subjects/01/01_01.amc"
-file = "01_01.amc"
-sha256 = "00a0c2889be1b8348ad31af98a1121fc0514984822922811de8564c83406b944"
-license = "CMU-MOCAP"
-author = "CMU Graphics Lab Motion Capture Database, subject 01"
-source_page = "http://mocap.cs.cmu.edu/"
-acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
-changes = "converted by scripts/convert_amc.py to the playground motion format (LMOT): root translation and per-bone rotation per frame; no channels added or altered"
-
-[[asset]]
-id = "motion_cmu_01_skeleton"
-kind = "motion"
-url = "http://mocap.cs.cmu.edu/subjects/01/01.asf"
-file = "01.asf"
-sha256 = "e993ace64e67bcfeaa378e1818db48dbc80fa1ebc3942c07338498ce5fdbcce5"
-license = "CMU-MOCAP"
-author = "CMU Graphics Lab Motion Capture Database, subject 01"
-source_page = "http://mocap.cs.cmu.edu/"
-acknowledgement = "The data used in this project was obtained from mocap.cs.cmu.edu."
-changes = "converted by scripts/convert_amc.py to the playground motion format (LMOT): root translation and per-bone rotation per frame; no channels added or altered"
-
-[[asset]]
-id = "font_press_start_2p"
-kind = "font"
-url = "https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/PressStart2P-Regular.ttf"
-file = "PressStart2P-Regular.ttf"
-sha256 = "034c77f1f05ec89421e4a63f0e3a4ca1ecf852cc6d2bf611f126f275728e017d"
-license = "OFL-1.1"
-author = "The Press Start 2P Project Authors"
-source_page = "https://fonts.google.com/specimen/Press+Start+2P"
-# "Press Start 2P" is a Reserved Font Name. A converted bitmap table is derived from this font: do not give it that name.
-changes = "rasterised by scripts/convert_font.py to an 8x8 glyph table (.lfont), printable ASCII; the TTF itself is not shipped"
-
-[[asset]]
-id = "font_press_start_2p_licence"
-kind = "text"
-url = "https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/OFL.txt"
-file = "PressStart2P-OFL.txt"
-sha256 = "705960c3281a5765ecc0b59bd4ed7ca59eed165748076bc2fc3e8fdbfeb944b0"
-license = "OFL-1.1"
-author = "The Press Start 2P Project Authors"
-source_page = "https://fonts.google.com/specimen/Press+Start+2P"
-
-[[asset]]
 id = "sound_essential_retro_512"
 kind = "sound"
 url = "https://opengameart.org/sites/default/files/The%20Essential%20Retro%20Video%20Game%20Sound%20Effects%20Collection%20%5B512%20sounds%5D.zip"
