@@ -12,7 +12,8 @@ from scene import Scene
 from hud import Hud
 from render3d import ArenaRenderer
 from app.shadow_pass import ShadowPass
-from app.ao_grid import ao_grid, AO_N, AO_X0, AO_SIZE
+from app.ao_bake import ao_bake
+from app.hub_ao import hub_ao_boxes, AO_N, AO_X0, AO_SIZE
 from std.math import sqrt
 from app.net_predict import PredictRun, run_predict_coupled, PREDICT_T, PREDICT_SEED
 from app.net_fracture import FractureNetResult, run_fracture_session
@@ -23,6 +24,7 @@ from frontier_assets import Character, parse_character, parse_ltexture, pose_pal
 from motion_match import build_match, m6_hash, _track as motion_track
 from app.town_motion import TownMotion
 from app.town_blend import TownBlend
+from app.debug_view import DEBUG_NONE, DEBUG_FLAT, DEBUG_SKY
 from app.foot_ik import foot_ik, Slope
 from app.rag_skin import rag_palette, pose_mat, placement
 from geometry.mat import Mat4
@@ -350,18 +352,11 @@ struct Host(Movable):
         # V4: the atmosphere (sky gradient, fog toward the horizon colour, linear lighting with ACES) and the sky: a sphere
         # 380 m across the camera (inside the 400 m far plane) with the engine's sky material
         self.renderer.value().mesh.set_atmosphere(self.boot.device(), Vec3(Real(SKY_TOP_R), Real(SKY_TOP_G), Real(SKY_TOP_B), Real(0.0)),
-            Vec3(Real(SKY_HOR_R), Real(SKY_HOR_G), Real(SKY_HOR_B), Real(0.0)), Float32(FOG_DENSITY), Float32(EXPOSURE), self.atmo_on and not self.skymark, self.atmo_on and not self.skymark, Float32(SKY_CURVE))
+            Vec3(Real(SKY_HOR_R), Real(SKY_HOR_G), Real(SKY_HOR_B), Real(0.0)), Float32(FOG_DENSITY), Float32(EXPOSURE), self.atmo_on, self.atmo_on, Float32(SKY_CURVE))
         if self.atmo_on or self.skymark:
             var eye = m.camera().position
-            # skymark (the visual check): the sky drawn as a colour-only magenta sphere and no fog, so a capture can tell sky
-            # pixels from far ground by colour
             var sky = DrawItem(1, eye, 0.0, 0.0, 0.0, 1.0, Vec3(Real(SKY_RADIUS), Real(SKY_RADIUS), Real(SKY_RADIUS), Real(0.0)),
                                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), -1, -1, 3, 0)
-            if self.skymark:  # the engine's unit sphere, colour-only
-                sky.color = Vec3(Real(1.0), Real(0.0), Real(1.0), Real(0.0))
-                sky.material = 0
-                sky.mesh_id = self.renderer.value().sphere
-                sky.half = sky.half * Real(2.0)
             self.renderer.value().push(sky^)
         # the scene's mesh items cast shadows: push turns every textured primitive into one (ludens-engine#78), so they are
         # the items it added for the scene that have a mesh
@@ -391,9 +386,9 @@ struct Host(Movable):
         var light = _light_vp()
         self.renderer.value().mesh.set_shadow(self.boot.device(), light, self.shadow_on)
         if self.ao_on and not self.ao_done:  # W10: the floor's occlusion, traced on the GPU over the pillars once
-            var cells = ao_grid(m.world.static_boxes(-20.0, -20.0, 20.0, 20.0, 1.0))
+            var cells = ao_bake(hub_ao_boxes(m.world), AO_N, AO_X0, AO_X0, AO_SIZE)  # ludens-engine#79
             self.renderer.value().mesh.set_ao(self.boot.device(), cells, AO_N, AO_N, AO_X0, AO_X0, AO_SIZE, AO_SIZE, True)
-            m.world.ao = True  # the HUD names the term (W10)
+            m.hud_extra = ["SOFTWARE RAY-TRACED AO"]  # the HUD names the term (W10; a host line, ludens-engine#72)
             self.ao_done = True
         if self.shadow_on:
             if not self.shadow:
@@ -408,13 +403,11 @@ struct Host(Movable):
         # V0: the building faces' texture layers (scenery taller than the 0.05 m ground tiles), counted for the visual check
         var seen = List[Int]()
         for it in self.renderer.value().items:
-            if it.pose_id < 0 and it.material > 0 and it.half[1] > Real(0.2) and it.layer not in seen:
+            if it.pose_id < 0 and it.material > 0 and it.material != 3 and it.half[1] > Real(0.2) and it.layer not in seen:  # not the sky
                 seen.append(it.layer)
         self.wall_layers = len(seen)
-        if self.flatmark:
-            for i in range(len(self.renderer.value().items)):
-                if self.renderer.value().items[i].material == 0:
-                    self.renderer.value().items[i].color = Vec3(Real(1.0), Real(0.0), Real(1.0), Real(0.0))
+        # the visual check's captures (ludens-engine#80): the renderer marks the sky or the colour-only items
+        self.renderer.value().debug_view = DEBUG_SKY if self.skymark else (DEBUG_FLAT if self.flatmark else DEBUG_NONE)
         self.renderer.value().draw(self.boot.device(), target, self.width, self.height, self.hud.value())
         self.world = m^
 
