@@ -2,8 +2,8 @@
 // is the page's offscreen render path: the frame is rendered into an app-owned texture and read back).
 // usage: node scripts/capture_scene.mjs <chrome> <url> <out.png> [timeout_s=180]
 // Optional environment: PRE_JS, an expression awaited in the page before the capture (e.g. a teleport); THEN_JS and
-// THEN_OUT, an expression awaited after the first capture and a second PNG taken in the same session (the visual check
-// takes the normal frame, then the same frame with playground_host_flatmark on).
+// THEN_OUT, expressions awaited after the first capture, each followed by one more PNG in the same session; several are
+// separated by '||' (the visual check takes the normal frame, the frame with the sky mask, then with flatmark on).
 // The page is ready when the five converted assets are up and at least ten frames have run (as in host_check).
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -69,7 +69,10 @@ async function grabTo(path) {
 }
 await grabTo(out);
 if (process.env.THEN_JS && process.env.THEN_OUT) {
-  console.log('capture-scene: then:', JSON.stringify(await js(process.env.THEN_JS)));
-  await grabTo(process.env.THEN_OUT);
+  const steps = process.env.THEN_JS.split('||'), outs = process.env.THEN_OUT.split('||');
+  for (let k = 0; k < steps.length && k < outs.length; k++) {
+    console.log('capture-scene: then:', JSON.stringify(await js(steps[k])));
+    await grabTo(outs[k]);
+  }
 }
 done(0);

@@ -571,6 +571,11 @@ struct Frontier(Movable):
         var culled = 0
         var half_cell = Real(CELL * 0.5)
         var half_cells = CELLS_PER_SIDE // 2
+        # V4: one ground plane under the whole map, below the cell tiles, so unloaded cells are ground too (the border walls
+        # hung over the sky before)
+        var hm = Real(HALF_MAP)
+        out.append(tex(DrawItem(0, Vec3(0.0, -0.12, 0.0, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(hm, 0.05, hm, 0.0),
+                                Vec3(0.62, 0.62, 0.6, 0.0)), LAYER_GROUND))
         # a tile per loaded cell that is on the map
         for k in self.part.loaded:
             var ix = (k >> 31) - (1 << 30)

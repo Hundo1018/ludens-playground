@@ -4,21 +4,26 @@ what a picture can be measured on. Reusable from the project environment:
 
     python3 scripts/visual_check.py <chrome> <base-url> <out-dir> [--bounds]
 
-<base-url> ends in index.html. Each view is one page load (`?offscreen`, so the frame is the app's own capture) with two
-captures in the same session: the normal frame, then the same frame with playground_host_flatmark on (every colour-only
-item, material 0, drawn magenta). Writes <out-dir>/<view>.png, <view>_flat.png, sheet.png and metrics.json, prints one
-line per metric, and with --bounds exits 1 when any metric is outside its bound.
+<base-url> ends in index.html. Each view is one page load (`?offscreen`, so the frame is the app's own capture) with three
+captures in the same session: the normal frame; the sky mask (playground_host_skymark: the sky drawn magenta and fog
+off, so a sky pixel is told from far ground that fog has faded to the horizon colour); then playground_host_flatmark
+(every colour-only item, material 0, drawn magenta). A page without the sky mask export (before V4) falls back to a
+colour rule for sky pixels. Writes <out-dir>/<view>.png, <view>_sky.png, <view>_flat.png, sheet.png and metrics.json,
+prints one line per metric, and with --bounds exits 1 when any metric is outside its bound.
 
-Metrics (the HUD rectangles are left out of every count). A sky pixel is blue-dominant and bright (b > r + 30,
-b > g + 10, luminance > 110).
+Metrics (the HUD rectangles are left out of every count). A sky pixel is magenta in the sky mask capture; without the
+mask export, a blue-dominant bright pixel of the normal frame (b > r + 30, b > g + 10, luminance > 110).
   flat          share of scene pixels drawn by colour-only items (magenta in the flatmark capture)
   floating_cols share of columns where, in the upper half, a sky pixel lies below a non-sky pixel: something hangs in the
                 sky with sky under it (the border walls over unloaded ground did, in every view)
-  sky_grad      hub view only: mean luminance of the top scene row minus that of the lowest all-sky row (a flat clear
-                colour gives 0)
+  sky_grad      hub view only: mean luminance of the sky pixels in the top three rows minus that of the sky pixels in
+                the three rows above the horizon (a flat clear colour gives 0)
   fog           hub view only: colour distance from the sky at the horizon to the ground just below it, divided by the
                 same distance for the ground near the bottom of the frame (fog pulls far ground toward the horizon)
   wall_layers   town view only: distinct texture layers on building faces (playground_host_wall_layers, at the source)
+  mean_lum      mean luminance of the scene pixels: a frame that failed to render is black, and every other metric
+                would pass on it, so a view below 25 fails
+A hub capture without sky_grad or fog (no sky pixel found) fails as well.
 """
 import json
 import os
@@ -42,7 +47,9 @@ BOUNDS = {
     "sky_grad": (8.0, None),
     "fog": (None, 0.7),
     "wall_layers": (3, None),
+    "mean_lum": (25.0, None),
 }
+REQUIRED = {"hub": ("sky_grad", "fog"), "town": ("wall_layers",)}
 HUD_BOXES = [(0, 0, 170, 75)]  # the top-left status box, in a 960x540 frame; scaled to the frame size
 HUD_BOTTOM = 32  # the help bar's height at the bottom, in a 540-high frame
 
@@ -74,18 +81,25 @@ def is_sky(p) -> bool:
     return p[2] > p[0] + 30 and p[2] > p[1] + 10 and lum(p) > 110
 
 
-def measure(normal: pathlib.Path, flat: pathlib.Path, view: str) -> dict:
+def measure(normal: pathlib.Path, flat: pathlib.Path, view: str, sky: pathlib.Path | None = None) -> dict:
     im = Image.open(normal).convert("RGB")
     fm = Image.open(flat).convert("RGB")
     w, h = im.size
     px, fx = im.load(), fm.load()
+    sm = Image.open(sky).convert("RGB").load() if sky is not None and sky.exists() else None
+
+    def sky_at(x, y):
+        return is_magenta(sm[x, y]) if sm is not None else is_sky(px[x, y])
+
     inside, bottom = hud_mask(w, h)
     total = magenta = 0
+    lum_sum = 0.0
     for y in range(bottom):
         for x in range(w):
             if inside(x, y):
                 continue
             total += 1
+            lum_sum += lum(px[x, y])
             if is_magenta(fx[x, y]):
                 magenta += 1
     # per column: sky under something in the upper half, and the horizon (the lowest sky pixel above the ground)
@@ -100,7 +114,7 @@ def measure(normal: pathlib.Path, flat: pathlib.Path, view: str) -> dict:
             if inside(x, y):
                 continue
             n += 1
-            if is_sky(px[x, y]):
+            if sky_at(x, y):
                 if seen_solid:
                     hang = True
                 low_sky = y
@@ -111,7 +125,7 @@ def measure(normal: pathlib.Path, flat: pathlib.Path, view: str) -> dict:
             floating += 1 if hang else 0
             if low_sky >= 0:
                 horizons.append(low_sky)
-    out = {"flat": magenta / total, "floating_cols": floating / max(cols, 1)}
+    out = {"flat": magenta / total, "floating_cols": floating / max(cols, 1), "mean_lum": lum_sum / total}
     if view == "hub" and horizons:
         horizons.sort()
         hz = horizons[len(horizons) // 2]
@@ -120,15 +134,15 @@ def measure(normal: pathlib.Path, flat: pathlib.Path, view: str) -> dict:
             vals = [px[x, y] for x in range(w) if not inside(x, y)]
             return tuple(sum(v[k] for v in vals) / len(vals) for k in range(3))
 
-        # the lowest row that is sky in every column outside the HUD
-        top_sky = 0
-        for y in range(hz + 1):
-            if all(is_sky(px[x, y]) for x in range(w) if not inside(x, y)):
-                top_sky = y
-        out["sky_grad"] = abs(lum(row(0)) - lum(row(top_sky)))
+        def sky_lum(y0, y1):
+            vals = [lum(px[x, y]) for y in range(max(0, y0), y1) for x in range(w) if not inside(x, y) and sky_at(x, y)]
+            return sum(vals) / len(vals) if vals else 0.0
+
+        # sky pixels only: the top rows against the rows just above the horizon
+        out["sky_grad"] = abs(sky_lum(0, 3) - sky_lum(hz - 3, hz))
         def band(y0, y1, want_sky):
             vals = [px[x, y] for y in range(max(0, y0), min(bottom, y1)) for x in range(w)
-                    if not inside(x, y) and is_sky(px[x, y]) == want_sky]
+                    if not inside(x, y) and sky_at(x, y) == want_sky]
             return tuple(sum(v[k] for v in vals) / len(vals) for k in range(3)) if vals else (0.0, 0.0, 0.0)
 
         sky = band(hz - 3, hz + 1, True)  # the sky just above the horizon
@@ -141,10 +155,13 @@ def measure(normal: pathlib.Path, flat: pathlib.Path, view: str) -> dict:
 
 
 def capture(chrome: str, base: str, view: str, query: str, pre: str, out_dir: pathlib.Path) -> tuple[bool, int]:
-    normal, flat = out_dir / f"{view}.png", out_dir / f"{view}_flat.png"
+    normal, sky, flat = out_dir / f"{view}.png", out_dir / f"{view}_sky.png", out_dir / f"{view}_flat.png"
     env = dict(os.environ)
-    env["THEN_OUT"] = str(flat)
-    env["THEN_JS"] = ("(async()=>{const h=window.host;h.x.playground_host_flatmark(h.app,1);"
+    env["THEN_OUT"] = f"{sky}||{flat}"
+    env["THEN_JS"] = ("(async()=>{const h=window.host;if(!h.x.playground_host_skymark)return 'no sky mask';"
+                      "h.x.playground_host_skymark(h.app,1);await new Promise(r=>setTimeout(r,300));return 'sky mask'})()"
+                      "||(async()=>{const h=window.host;if(h.x.playground_host_skymark)h.x.playground_host_skymark(h.app,0);"
+                      "h.x.playground_host_flatmark(h.app,1);"
                       "await new Promise(r=>setTimeout(r,300));return h.x.playground_host_wall_layers(h.app)})()")
     if pre:
         env["PRE_JS"] = pre
@@ -154,7 +171,11 @@ def capture(chrome: str, base: str, view: str, query: str, pre: str, out_dir: pa
     layers = -1
     for line in proc.stdout.splitlines():
         if line.startswith("capture-scene: then:"):
-            layers = int(line.split(":", 2)[2].strip())
+            v = line.split(":", 2)[2].strip()
+            if v.lstrip("-").isdigit():
+                layers = int(v)
+        if line.startswith("capture-scene: then:") and "no sky mask" in line and sky.exists():
+            sky.unlink()
     return proc.returncode == 0 and normal.exists() and flat.exists(), layers
 
 
@@ -174,6 +195,10 @@ def sheet(out_dir: pathlib.Path) -> None:
 
 def check(metrics: dict) -> list[str]:
     bad = []
+    for view, keys in REQUIRED.items():
+        for key in keys:
+            if view in metrics and key not in metrics[view]:
+                bad.append(f"{view}.{key} could not be measured")
     for view, m in metrics.items():
         for key, (lo, hi) in BOUNDS.items():
             if key not in m:
@@ -197,7 +222,7 @@ def main() -> None:
         if not ok:
             failed.append(f"{view}: capture failed")
             continue
-        m = measure(out_dir / f"{view}.png", out_dir / f"{view}_flat.png", view)
+        m = measure(out_dir / f"{view}.png", out_dir / f"{view}_flat.png", view, out_dir / f"{view}_sky.png")
         if view == "town":
             m["wall_layers"] = layers
         metrics[view] = m

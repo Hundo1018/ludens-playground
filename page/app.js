@@ -218,6 +218,7 @@ async function boot() {
   // The sun's shadow (plan step 5): on by default; ?noshadow turns the depth pass and the shadow factor off.
   x.playground_host_shadow(app, params.has("noshadow") ? 0 : 1);
   x.playground_host_ao(app, params.has("noao") ? 0 : 1); // W10: the occlusion term, traced over the pillars
+  if (params.has("noatmo")) x.playground_host_atmo(app, 0); // V4: sky, fog and tone mapping are on by default
   // The three-colour netcode view (plan step 8): server truth, predicted and shown, drawn for player 0 on a 150 ms link.
   // The three-colour netcode view (W9): on by default, labelled, and a button turns it off (?nonetview starts it off).
   // The recorded choice is on: the view is the step-8 showcase and the visitor should see it without a URL parameter.
