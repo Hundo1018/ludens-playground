@@ -82,6 +82,13 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/foot_ik_native.mojo --target native -o build/foot_ik_native
 build/foot_ik_native
+# V5: CesiumMan skinned to the knocked-down figure's bodies stays on them as it falls.
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/rag_skin_native.mojo --target native -o build/rag_skin_native
+build/rag_skin_native
 # Step 5 shadow probe: a depth texture through a comparison sampler, natively (plan step 5).
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \

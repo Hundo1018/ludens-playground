@@ -149,6 +149,11 @@ comptime LAYER_METAL = 11  # rusty_metal_02
 comptime TEXTURE_LAYERS = 12
 
 
+def _turned(pos: Vec3, c: Real, s: Real, lx: Real, ly: Real, lz: Real) -> Vec3:
+    """A point given in a frame at pos turned about +Y (cos c, sin s), in world space; y is the height above the ground."""
+    return Vec3(pos[0] + c * lx + s * lz, ly, pos[2] - s * lx + c * lz, 0.0)
+
+
 def tex(var d: DrawItem, layer: Int) -> DrawItem:
     """The item textured with `layer` (triplanar), its colour kept as the tint."""
     d.material = 2
@@ -276,6 +281,9 @@ struct Frontier(Movable):
     var flag_rest: List[Vec3]
     var rag: List[Int64]  # B4: the knocked-down figure's bodies (pelvis first)
     var rag_joints: List[Int]
+    var rag_rest_pos: List[Vec3]  # V5: each body's pose when the figure was added (the skinned draw's reference)
+    var rag_rest_rot: List[Quat]
+    var rag_boxes: Bool  # V5: draw the figure as boxes; the host turns it off when it draws CesiumMan on the bodies
     var fracture_events: Int  # fracture events (bonds broken or fragments evicted) since the start (W7)
 
     def __init__(out self) raises:
@@ -312,6 +320,9 @@ struct Frontier(Movable):
         self.flag_rest = List[Vec3]()
         self.rag = List[Int64]()
         self.rag_joints = List[Int]()
+        self.rag_rest_pos = List[Vec3]()
+        self.rag_rest_rot = List[Quat]()
+        self.rag_boxes = True
         self.player = DynamicCharacter.spawn(
             self.world.scene,
             QuatBody6.at_rest(Vec3(0.0, 1.0, 0.0, 0.0), Inertia3.box(80.0, 0.3, 0.9, 0.3)),
@@ -354,6 +365,9 @@ struct Frontier(Movable):
         self.flag_rest = move.flag_rest^
         self.rag = move.rag^
         self.rag_joints = move.rag_joints^
+        self.rag_rest_pos = move.rag_rest_pos^
+        self.rag_rest_rot = move.rag_rest_rot^
+        self.rag_boxes = move.rag_boxes
 
     # ------------------------------------------------------------------------------------------------- building
 
@@ -650,18 +664,18 @@ struct Frontier(Movable):
                     var a = j * (FLAG_NX + 1) + i
                     var c = a + FLAG_NX + 1
                     out.append(_cell_item(xs[a], xs[a + 1], xs[c], xs[c + 1], Vec3(0.75, 0.15, 0.12, 0.0)))
-        # B4: the knocked-down figure (red, as the guard)
-        for i in range(len(self.rag)):
+        # B4: the knocked-down figure (red, as the guard); V5: the host draws CesiumMan on these bodies instead
+        for i in range(len(self.rag) if self.rag_boxes else 0):
             var rs = self.world.state(self.rag[i])
-            var half = Vec3(0.18, 0.1, 0.12, 0.0)
+            var half = Vec3(0.11, 0.07, 0.08, 0.0)
             if i == 1:
-                half = Vec3(0.2, 0.28, 0.12, 0.0)
+                half = Vec3(0.13, 0.2, 0.08, 0.0)
             elif i == 2:
-                half = Vec3(0.13, 0.13, 0.13, 0.0)
+                half = Vec3(0.1, 0.1, 0.1, 0.0)
             elif i == 3 or i == 4:
-                half = Vec3(0.07, 0.28, 0.07, 0.0)
+                half = Vec3(0.05, 0.14, 0.05, 0.0)
             elif i == 5:
-                half = Vec3(0.06, 0.25, 0.06, 0.0)
+                half = Vec3(0.04, 0.13, 0.04, 0.0)
             out.append(tex(DrawItem(1 if i == 2 else 0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
                                 half, Vec3(1.0, 0.45, 0.4, 0.0)), LAYER_HESSIAN))
         # the player is drawn by the host as a skinned character (plan W3), not here
@@ -747,30 +761,54 @@ struct Frontier(Movable):
             fl.pin(j * (FLAG_NX + 1))
         self.flag_rest = fl.x.copy()
         self.flag = fl^
-    def knock_down(mut self, pos: Vec3, push: Vec3) raises:
-        """B4 (RDR2's physics-based reactions): a figure of six bodies on ball joints (pelvis, torso, head, two thighs, an
-        arm) stands at pos and is pushed along push; it falls under physics. A new knock-down removes the previous one."""
+    def knock_down(mut self, pos: Vec3, push: Vec3, yaw: Real = 0.0) raises:
+        """B4 (RDR2's physics-based reactions): a figure of six bodies on ball joints (pelvis, torso, head, two thighs, the
+        left arm) stands at pos, turned by yaw about +Y, and is pushed along push; it falls under physics. V5: the bodies
+        are laid out on CesiumMan's own joints (its slow walk, frame 0: pelvis 0.62 m, neck 1.13 m; +x is its left), so
+        the skinned mesh drawn on them (app/rag_skin.mojo) sits on them. A new knock-down removes the previous one."""
         for j in self.rag_joints:
             self.world.remove_joint(j)
         for h in self.rag:
             self.world.remove(h)
         self.rag = List[Int64]()
         self.rag_joints = List[Int]()
-        var b = Vec3(pos[0], 0.0, pos[2], 0.0)
-        var pelvis = self.world.add_box(b + Vec3(0.0, 1.0, 0.0, 0.0), Vec3(0.18, 0.1, 0.12, 0.0), 12.0, False)
-        var torso = self.world.add_box(b + Vec3(0.0, 1.38, 0.0, 0.0), Vec3(0.2, 0.28, 0.12, 0.0), 20.0, False)
-        var head = self.world.add_sphere(b + Vec3(0.0, 1.79, 0.0, 0.0), 0.13, 5.0, False)
-        var lthigh = self.world.add_box(b + Vec3(-0.1, 0.62, 0.0, 0.0), Vec3(0.07, 0.28, 0.07, 0.0), 7.0, False)
-        var rthigh = self.world.add_box(b + Vec3(0.1, 0.62, 0.0, 0.0), Vec3(0.07, 0.28, 0.07, 0.0), 7.0, False)
-        var arm = self.world.add_box(b + Vec3(-0.27, 1.41, 0.0, 0.0), Vec3(0.06, 0.25, 0.06, 0.0), 4.0, False)
+        var c = cos(yaw)
+        var sn = sin(yaw)
+        var turn = Quat(0.0, sin(yaw * 0.5), 0.0, cos(yaw * 0.5))
+
+        var pelvis = self.world.add_box(_turned(pos, c, sn, 0.0, 0.65, 0.0), Vec3(0.11, 0.07, 0.08, 0.0), 12.0, False)
+        var torso = self.world.add_box(_turned(pos, c, sn, 0.01, 0.92, -0.02), Vec3(0.13, 0.2, 0.08, 0.0), 20.0, False)
+        var head = self.world.add_sphere(_turned(pos, c, sn, 0.02, 1.22, -0.05), 0.1, 5.0, False)
+        var lthigh = self.world.add_box(_turned(pos, c, sn, 0.087, 0.426, 0.03), Vec3(0.05, 0.14, 0.05, 0.0), 7.0, False)
+        var rthigh = self.world.add_box(_turned(pos, c, sn, -0.054, 0.439, 0.07), Vec3(0.05, 0.14, 0.05, 0.0), 7.0, False)
+        var arm = self.world.add_box(_turned(pos, c, sn, 0.124, 0.898, -0.06), Vec3(0.04, 0.13, 0.04, 0.0), 4.0, False)
         self.rag.append(pelvis); self.rag.append(torso); self.rag.append(head)
         self.rag.append(lthigh); self.rag.append(rthigh); self.rag.append(arm)
-        self.rag_joints.append(self.world.add_ball_joint(pelvis, torso, Vec3(0.0, 0.1, 0.0, 0.0), Vec3(0.0, -0.28, 0.0, 0.0)))
-        self.rag_joints.append(self.world.add_ball_joint(torso, head, Vec3(0.0, 0.28, 0.0, 0.0), Vec3(0.0, -0.13, 0.0, 0.0)))
-        self.rag_joints.append(self.world.add_ball_joint(pelvis, lthigh, Vec3(-0.1, -0.1, 0.0, 0.0), Vec3(0.0, 0.28, 0.0, 0.0)))
-        self.rag_joints.append(self.world.add_ball_joint(pelvis, rthigh, Vec3(0.1, -0.1, 0.0, 0.0), Vec3(0.0, 0.28, 0.0, 0.0)))
-        self.rag_joints.append(self.world.add_ball_joint(torso, arm, Vec3(-0.27, 0.28, 0.0, 0.0), Vec3(0.0, 0.25, 0.0, 0.0)))
+        for h in self.rag:
+            self.world.teleport(h, self.world.state(h).pos, turn)
+        self.rag_joints.append(self.world.add_ball_joint(pelvis, torso, Vec3(0.0, 0.07, 0.0, 0.0), Vec3(-0.01, -0.2, 0.02, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(torso, head, Vec3(0.01, 0.2, -0.03, 0.0), Vec3(0.0, -0.1, 0.0, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(pelvis, lthigh, Vec3(0.066, -0.093, 0.025, 0.0), Vec3(-0.021, 0.13, -0.005, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(pelvis, rthigh, Vec3(-0.069, -0.084, 0.038, 0.0), Vec3(-0.015, 0.127, -0.032, 0.0)))
+        self.rag_joints.append(self.world.add_ball_joint(torso, arm, Vec3(0.102, 0.097, -0.02, 0.0), Vec3(-0.012, 0.119, 0.02, 0.0)))
+        self.rag_rest_pos = List[Vec3]()
+        self.rag_rest_rot = List[Quat]()
+        for h in self.rag:
+            var st = self.world.state(h)
+            self.rag_rest_pos.append(st.pos)
+            self.rag_rest_rot.append(st.rot)
         self.world.apply_impulse(torso, push * Real(60.0) + Vec3(0.0, 10.0, 0.0, 0.0))
+
+    def clear_rag(mut self) raises:
+        """V5: the figure leaves when the guard stands up again."""
+        for j in self.rag_joints:
+            self.world.remove_joint(j)
+        for h in self.rag:
+            self.world.remove(h)
+        self.rag = List[Int64]()
+        self.rag_joints = List[Int]()
+        self.rag_rest_pos = List[Vec3]()
+        self.rag_rest_rot = List[Quat]()
 
     def _tick(mut self, intent: Intent, jump: Bool) raises:
         self.tick += 1

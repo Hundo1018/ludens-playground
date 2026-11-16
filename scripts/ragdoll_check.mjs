@@ -1,6 +1,7 @@
 // B4 (RDR2's physics reactions): when the guard touches the player it is knocked down. A figure of six bodies on ball
 // joints stands where the guard was and falls under physics; the skinned guard is hidden while it lies there.
-// Checks: no figure before the contact; after it the pelvis starts near 1 m and is more than 0.5 m lower within 3 s.
+// Checks: no figure before the contact; after it the pelvis starts near 0.65 m (CesiumMan's) and is more than 0.5 m
+// lower within 3 s.
 // usage: node scripts/ragdoll_check.mjs <chrome> <url> [timeout_s=300]
 // The page may be offscreen: the town steps with the simulation (frame), not in the draw path.
 import { spawn } from 'node:child_process';
@@ -41,7 +42,7 @@ for (let i = 0; i < 300 && c === 0; i++) { await sleep(100); c = await contacts(
 need(c >= 1, `the guard touches the player (contacts ${c})`);
 let first = -1;
 for (let i = 0; i < 50 && first === -1; i++) { await sleep(20); first = await pelvis(); }
-need(first > 700, `the figure appears standing: pelvis ${first} mm`);
+need(first > 550, `the figure appears standing (CesiumMan's pelvis is at 0.65 m): pelvis ${first} mm`);
 let low = first;
 const samples = [];
 for (let i = 0; i < 30; i++) { await sleep(100); const p = await pelvis(); samples.push(p); if (p < low) low = p; }
