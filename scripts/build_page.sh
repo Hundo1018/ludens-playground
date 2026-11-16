@@ -45,6 +45,11 @@ python3 scripts/convert_texture.py build/assets/src/concrete_wall_003_diff_1k.jp
 python3 scripts/convert_texture.py build/assets/src/rocks_ground_01_diff_1k.jpg "$CONV/rocks_ground_01.ltexture"
 python3 scripts/extract_glb_texture.py build/assets/src/Fox.glb 0 "$CONV/fox_base.png"
 python3 scripts/convert_texture.py "$CONV/fox_base.png" "$CONV/fox_base.ltexture"
+# V1: CesiumMan's own base colour (its GLB embeds one JPEG, material 0); V2-V3: Poly Haven CC0 textures (assets/manifest.toml)
+python3 scripts/extract_glb_texture.py build/assets/src/CesiumMan.glb 0 "$CONV/cesium_base.png"
+python3 scripts/convert_texture.py "$CONV/cesium_base.png" "$CONV/cesium_base.ltexture"
+LAYER_TEX="medieval_blocks_02 castle_brick_07 plastered_wall_02 brown_planks_03 bark_brown_02 hessian_230 rusty_metal_02"
+for t in $LAYER_TEX; do python3 scripts/convert_texture.py "build/assets/src/${t}_diff_1k.jpg" "$CONV/$t.ltexture"; done
 # W8: four CC0 effects from the archive in the manifest (sound_essential_retro_512), converted to 48 kHz mono .lsound
 SND="The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala/General Sounds"
 python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Menu Sounds/sfx_menu_select1.wav" "$CONV/sfx_menu_select1.lsound"
@@ -52,7 +57,7 @@ python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Co
 python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Simple Damage Sounds/sfx_damage_hit1.wav" "$CONV/sfx_damage_hit1.lsound"
 python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Positive Sounds/sfx_sounds_powerup1.wav" "$CONV/sfx_sounds_powerup1.lsound"
 # the page ships these; nothing else in the converted directory
-for f in CesiumMan.lcharacter Fox.lcharacter concrete_wall_003.ltexture rocks_ground_01.ltexture fox_base.ltexture sfx_menu_select1.lsound sfx_coin_cluster1.lsound sfx_damage_hit1.lsound sfx_sounds_powerup1.lsound; do cp "$CONV/$f" "$OUT/assets/"; done
+for f in CesiumMan.lcharacter Fox.lcharacter concrete_wall_003.ltexture rocks_ground_01.ltexture fox_base.ltexture cesium_base.ltexture $(for t in $LAYER_TEX; do echo $t.ltexture; done) sfx_menu_select1.lsound sfx_coin_cluster1.lsound sfx_damage_hit1.lsound sfx_sounds_powerup1.lsound; do cp "$CONV/$f" "$OUT/assets/"; done
 cp build/deps/ludens-engine/shell/web/worklet.js "$OUT/"  # the engine's AudioWorklet ring player (W8)
 python3 scripts/write_index.py "$OUT/assets" "$OUT/assets/index.json"
 python3 scripts/write_credits_html.py assets/CREDITS.md "$OUT/credits.html"

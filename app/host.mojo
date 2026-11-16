@@ -24,6 +24,8 @@ from frontier_assets import Character, parse_character, parse_ltexture, pose_pal
 from motion_match import build_match, m6_hash, _track as motion_track
 from app.town_motion import TownMotion
 from app.foot_ik import foot_ik, Slope
+from app.meshes import unit_sphere_arrays
+from frontier.world import TEXTURE_LAYERS, LAYER_CESIUM, LAYER_PLANKS, LAYER_CONCRETE, tex
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow, positions_hash
@@ -127,6 +129,9 @@ struct Host(Movable):
     var ik_worst_um: Int  # E2: the worst foot error on the hub's ramp with foot IK, micrometres, since the start
     var ik_raw_um: Int  # E2: the same without IK
     var ik_frames: Int
+    var layer_tex: List[List[List[UInt8]]]  # V1-V3: textures for layers 4 and up, as the page sends them (empty until then)
+    var layer_loaded: List[Bool]  # per layer: uploaded to the renderer
+    var sphere_mesh: Int  # V2: the unit sphere a textured sphere is drawn with
     var flatmark: Bool  # V0: every colour-only item (material 0) drawn magenta, so a capture can count them
     var wall_layers: Int  # V0: distinct texture layers on the building faces in the last frame
     var ik_yaws: List[Real]  # E2: the slow walk's facing yaw per frame (motion_match's track), filled once
@@ -201,6 +206,12 @@ struct Host(Movable):
         self.ik_raw_um = 0
         self.ik_frames = 0
         self.flatmark = False
+        self.layer_tex = List[List[List[UInt8]]]()
+        self.layer_loaded = List[Bool]()
+        for _ in range(TEXTURE_LAYERS):
+            self.layer_tex.append(List[List[UInt8]]())
+            self.layer_loaded.append(False)
+        self.sphere_mesh = -1
         self.wall_layers = 0
         self.ik_yaws = List[Real]()
         self.crowd_ext = False
@@ -278,6 +289,9 @@ struct Host(Movable):
         self.ik_raw_um = move.ik_raw_um
         self.ik_frames = move.ik_frames
         self.flatmark = move.flatmark
+        self.layer_tex = move.layer_tex^
+        self.layer_loaded = move.layer_loaded^
+        self.sphere_mesh = move.sphere_mesh
         self.wall_layers = move.wall_layers
         self.ik_yaws = move.ik_yaws^
         self.contacts = move.contacts
@@ -315,20 +329,13 @@ struct Host(Movable):
         if not self.hud:
             self.hud = Hud(self.boot.device(), format)
         if not self.renderer:
-            self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=4)  # layers: white, wall, ground, the Fox
+            self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=TEXTURE_LAYERS)  # frontier/world.mojo LAYER_*
         self._register()
         self.renderer.value().begin(view)
         # the mesh items that cast shadows: static meshes only (the skinned characters are not in the shadow pass yet)
         var shadow_items = List[DrawItem]()
         for it in m.scene():
-            var item = it.copy()
-            if item.kind == 0:  # the scenery (ground tiles, walls, boxes) is textured on the mesh pass
-                item.material = 2
-                if self.wall_mesh >= 0:
-                    if self.ground_loaded and item.half[1] <= Real(0.1):  # the flat ground tiles (half height 0.05) on layer 2
-                        item.layer = 2
-                    item.mesh_id = self.wall_mesh  # walls keep layer 1
-                    item.half = item.half * Real(2.0)  # the unit cube has half-extent 0.5; the mesh pass scales it by half
+            var item = self._meshify(it.copy())  # every scene item carries its texture layer (frontier/world.mojo)
             if item.mesh_id >= 0:
                 shadow_items.append(item.copy())
             self.renderer.value().push(item)
@@ -393,7 +400,7 @@ struct Host(Movable):
         for side in range(2):
             var ints = self.fracnet.value().server_ints.copy() if side == 0 else self.fracnet.value().client_ints.copy()
             var off = Vec3(Real(-5.5) if side == 0 else Real(5.5), Real(0.0), Real(-14.0), Real(0.0))
-            var col = Vec3(Real(0.55), Real(0.5), Real(0.45), Real(0.0)) if side == 0 else Vec3(Real(0.35), Real(0.5), Real(0.75), Real(0.0))
+            var col = Vec3(Real(0.95), Real(0.9), Real(0.85), Real(0.0)) if side == 0 else Vec3(Real(0.7), Real(0.8), Real(1.0), Real(0.0))
             var nfr = (len(ints) - 3) // 8
             if ints[2] != 0:
                 nfr = (len(ints) - 3 - 7) // 8
@@ -412,8 +419,24 @@ struct Host(Movable):
                 var qw = Float64(ints[k + 6]) / 1e6
                 k += 7
                 var half = Vec3(Real(0.6), Real(0.6), Real(0.6), Real(0.0)) if crate else Vec3(Real(0.3), Real(0.3), Real(0.15), Real(0.0))
-                var c = Vec3(Real(0.3), Real(0.3), Real(0.32), Real(0.0)) if crate else col
-                self.renderer.value().push(DrawItem(0, pos, qx, qy, qz, qw, half, c))
+                var c = Vec3(Real(1.0), Real(0.95), Real(0.9), Real(0.0)) if crate else col
+                self.renderer.value().push(self._meshify(tex(DrawItem(0, pos, qx, qy, qz, qw, half, c), LAYER_PLANKS if crate else LAYER_CONCRETE)))
+
+    def _meshify(self, var item: DrawItem) -> DrawItem:
+        """A textured primitive (material > 0, no mesh) becomes a mesh item: a box on the unit cube, a sphere on the unit
+        sphere (both 1 across, so the half extents double). A layer not uploaded yet samples white (layer 0) meanwhile."""
+        if item.material == 0 or item.mesh_id >= 0 or item.pose_id >= 0:
+            return item^
+        var m = self.wall_mesh if item.kind == 0 else self.sphere_mesh
+        if m < 0:
+            return item^
+        if item.kind == 1:
+            item.half = Vec3(item.half[0], item.half[0], item.half[0], Real(0.0))
+        item.mesh_id = m
+        item.half = item.half * Real(2.0)
+        if item.layer >= 0 and item.layer < len(self.layer_loaded) and not self.layer_loaded[item.layer]:
+            item.layer = 0
+        return item^
 
     def _register(mut self) raises:
         """Once both characters and the wall are on the page: their meshes and the texture layer go to the renderer.
@@ -424,6 +447,16 @@ struct Host(Movable):
         if self.fox_tex and not self.fox_tex_loaded and self.renderer and not self.no_tex:
             self.renderer.value().textures.load_layer(self.boot.device(), UInt32(3), self.fox_tex.value().copy())
             self.fox_tex_loaded = True
+        self.layer_loaded[0] = True
+        if self.ground_loaded:
+            self.layer_loaded[2] = True
+        if self.fox_tex_loaded:
+            self.layer_loaded[3] = True
+        if self.renderer and not self.no_tex:
+            for L in range(4, TEXTURE_LAYERS):
+                if not self.layer_loaded[L] and len(self.layer_tex[L]) > 0:
+                    self.renderer.value().textures.load_layer(self.boot.device(), UInt32(L), self.layer_tex[L].copy())
+                    self.layer_loaded[L] = True
         if self.placed or not self.cesium or not self.fox or not self.wall:
             return
         var c = self.cesium.value().copy()
@@ -431,8 +464,11 @@ struct Host(Movable):
         var f = self.fox.value().copy()
         self.skin_fox = self.renderer.value().meshes.add_skinned(f.positions.copy(), f.normals.copy(), f.uv.copy(), f.joints.copy(), f.weights.copy(), f.indices.copy())
         self.renderer.value().textures.load_layer(self.boot.device(), UInt32(1), self.wall.value().copy())
+        self.layer_loaded[1] = True
         var cube = unit_cube_arrays()
         self.wall_mesh = self.renderer.value().meshes.add_static(cube[0].copy(), cube[1].copy(), cube[2].copy(), cube[3].copy())
+        var sph = unit_sphere_arrays()
+        self.sphere_mesh = self.renderer.value().meshes.add_static(sph[0].copy(), sph[1].copy(), sph[2].copy(), sph[3].copy())
         self.placed = True
 
     def _characters(mut self, player: Vec3, vel: Vec3, view: View) raises:
@@ -442,6 +478,7 @@ struct Host(Movable):
             return
         var c = self.cesium.value().copy()
         var f = self.fox.value().copy()
+        var cesium_mat = 1 if self.layer_loaded[LAYER_CESIUM] else 0  # V1: CesiumMan's own texture once it is uploaded
         var pal = pose_palette(c, self.clock)
         var fox_base = c.joint_count
         # the circling Fox walks at 1.5 m/s, so it keeps the Walk clip (plan W3: the four-second cycle is gone)
@@ -628,8 +665,8 @@ struct Host(Movable):
             var pos = Vec3(Real(r.x), Real(0.0), Real(r.z), Real(0.0))
             self.renderer.value().push(DrawItem(
                 -1, pos, 0.0, 0.0, 0.0, 1.0,
-                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.6), Real(0.75), Real(0.9), Real(0.0)),
-                self.skin_cesium, crowd_bases[k], 0,
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(0.85), Real(0.9), Real(1.0), Real(0.0)),
+                self.skin_cesium, crowd_bases[k], cesium_mat, LAYER_CESIUM,
             ))
 
         for k in range(len(town_rows)):
@@ -641,8 +678,8 @@ struct Host(Movable):
             self.renderer.value().push(DrawItem(
                 -1, pos, 0.0, sin(hy), 0.0, cos(hy),
                 Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
-                Vec3(Real(0.85), Real(0.12), Real(0.1), Real(0.0)) if k == town_guard else Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
-                self.skin_cesium, town_bases[k], 0,
+                Vec3(Real(1.0), Real(0.45), Real(0.4), Real(0.0)) if k == town_guard else Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
+                self.skin_cesium, town_bases[k], cesium_mat, LAYER_CESIUM,
             ))
         # E2: the ramps (each a thin box turned about +z so its top rises 20 degrees along +x through the walker's feet)
         # and the two walkers, the IK one tinted green, the plain one grey
@@ -650,16 +687,16 @@ struct Host(Movable):
         for side in range(len(ik_bases)):
             var base = Vec3(Real(IK_RAMP_X0 if side == 0 else IK_RAMP_X1), Real(IK_RAMP_Y), Real(IK_RAMP_Z), Real(0.0))
             var normal = Vec3(Real(-sin(th)), Real(cos(th)), Real(0.0), Real(0.0))
-            self.renderer.value().push(DrawItem(
+            self.renderer.value().push(self._meshify(tex(DrawItem(
                 0, base - normal * Real(0.05), 0.0, 0.0, sin(th * 0.5), cos(th * 0.5),
-                Vec3(Real(1.6), Real(0.05), Real(0.8), Real(0.0)), Vec3(Real(0.45), Real(0.4), Real(0.35), Real(0.0)),
-            ))
+                Vec3(Real(1.6), Real(0.05), Real(0.8), Real(0.0)), Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
+            ), LAYER_PLANKS)))
             var hy = ik_yaw * 0.5
             self.renderer.value().push(DrawItem(
                 -1, base, 0.0, sin(hy), 0.0, cos(hy),
                 Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
-                Vec3(Real(0.6), Real(0.9), Real(0.6), Real(0.0)) if side == 0 else Vec3(Real(0.7), Real(0.7), Real(0.7), Real(0.0)),
-                self.skin_cesium, ik_bases[side], 0,
+                Vec3(Real(0.8), Real(1.0), Real(0.8), Real(0.0)) if side == 0 else Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
+                self.skin_cesium, ik_bases[side], cesium_mat, LAYER_CESIUM,
             ))
 
     def _capture(mut self, format: UInt32) raises:
@@ -932,7 +969,8 @@ def playground_host_capture_release(app: UInt64) abi("C"):
 
 @export
 def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64) abi("C") -> Int32:
-    """A converted asset from the page: 1 CesiumMan.lcharacter, 2 Fox.lcharacter, 3 concrete_wall_003.ltexture. The bytes
+    """A converted asset from the page: 1 CesiumMan.lcharacter, 2 Fox.lcharacter, 3 concrete_wall_003.ltexture; 10 + L
+    an .ltexture for layer L >= 4 (frontier/world.mojo LAYER_*). The bytes
     are copied here, so the page may free its buffer when this returns. 0 ok, -1 failed."""
     var h = _host(app)
     try:
@@ -954,6 +992,8 @@ def playground_host_asset(app: UInt64, kind: Int32, ptr: UInt64, length: UInt64)
             h[].ground = parse_ltexture(bytes)
         elif kind == 5:
             h[].fox_tex = parse_ltexture(bytes)
+        elif kind >= 14 and kind < 10 + TEXTURE_LAYERS:
+            h[].layer_tex[Int(kind) - 10] = parse_ltexture(bytes)  # V1-V3: a texture for layer kind - 10
         else:
             raise Error("playground_host_asset: unknown kind " + String(kind))
         return 0

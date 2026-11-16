@@ -41,7 +41,7 @@ function png(w, h, rgba) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
-for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.assets')) >= 5 && (await js('window.host.frames')) >= 10) break; await sleep(100); }
+for (let i = 0; i < 600; i++) { if ((await js('window.host && (window.host.assetsDone || window.host.assets >= 5)')) && (await js('window.host.frames')) >= 10) break; await sleep(100); }
 const err = await js('window.host && window.host.error');
 if (err) { console.log('capture-scene: page error: ' + err); done(1); }
 await sleep(1000);

@@ -85,8 +85,10 @@ await key('keyup', 'KeyD'); await key('keyup', 'KeyW');
 const moved = await grab('moved');
 if (hub && moved) { const n = differ(hub, moved); need(n > 5000, `holding W and D changed the picture (${n} pixels)`); }
 // the converted assets: both characters and the wall are on the page before the character checks
-for (let i = 0; i < 400; i++) { if ((await js('window.host && window.host.assets')) >= 5) break; await sleep(100); }
-need((await js('window.host && window.host.assets')) === 5, 'the page loads the five converted assets (both characters, the wall, the ground rock, the Fox base colour)');
+for (let i = 0; i < 400; i++) { if (await js('window.host && window.host.assetsDone')) break; await sleep(100); }
+const wantAssets = await js('fetch("./assets/index.json").then((r) => r.json()).then((ix) => Object.keys(ix).filter((n) => !n.endsWith(".lsound")).length)');
+const gotAssets = await js('window.host && window.host.assets');
+need(gotAssets === wantAssets && wantAssets >= 13, `the page loads every converted asset in index.json (characters, the wall, ground and Fox textures, CesiumMan's texture, seven Poly Haven textures): ${gotAssets} of ${wantAssets}`);
 // B1 (design 1.10): the rest-pose palette, applied by the CPU reference, against root_transform * p (< 1e-4)
 for (const [which, name] of [[1, 'CesiumMan'], [2, 'Fox']]) {
   const err = await js(`window.host.x.playground_host_b1_check(window.host.app, ${which})`);

@@ -133,6 +133,42 @@ def zone_name(zone: Int) -> String:
     return "HUB"
 
 
+# V1-V3: the texture layers the page loads (app/host.mojo uploads them; assets/manifest.toml lists the sources). Every
+# item the Frontier draws carries one (triplanar, material 2): no colour-only boxes. The colour stays as a tint.
+comptime LAYER_CONCRETE = 1  # concrete_wall_003
+comptime LAYER_GROUND = 2  # rocks_ground_01
+comptime LAYER_FOX = 3
+comptime LAYER_CESIUM = 4  # CesiumMan's own texture
+comptime LAYER_BLOCKS = 5  # medieval_blocks_02
+comptime LAYER_BRICK = 6  # castle_brick_07
+comptime LAYER_PLASTER = 7  # plastered_wall_02
+comptime LAYER_PLANKS = 8  # brown_planks_03
+comptime LAYER_BARK = 9  # bark_brown_02
+comptime LAYER_HESSIAN = 10  # hessian_230
+comptime LAYER_METAL = 11  # rusty_metal_02
+comptime TEXTURE_LAYERS = 12
+
+
+def tex(var d: DrawItem, layer: Int) -> DrawItem:
+    """The item textured with `layer` (triplanar), its colour kept as the tint."""
+    d.material = 2
+    d.layer = layer
+    return d^
+
+
+def building_layer(x: Real, z: Real) -> Int:
+    """V3: a building's face texture, from a hash of where it stands, so neighbours differ."""
+    var h = (UInt64(Int(x * 7.0) + 100000) * UInt64(0x9E3779B97F4A7C15)) ^ (UInt64(Int(z * 13.0) + 100000) * UInt64(0xC2B2AE3D27D4EB4F))
+    var k = Int((h >> 33) % 4)
+    if k == 0:
+        return LAYER_CONCRETE
+    if k == 1:
+        return LAYER_BLOCKS
+    if k == 2:
+        return LAYER_BRICK
+    return LAYER_PLASTER
+
+
 def zone_color(zone: Int) -> Vec3:
     if zone == ZONE_QUARRY:
         return Vec3(0.55, 0.52, 0.48, 0.0)
@@ -204,13 +240,14 @@ def _cell_item(p00: Vec3, p10: Vec3, p01: Vec3, p11: Vec3, color: Vec3) -> DrawI
     else:
         var s = (1.0 + m22 - m00 - m11) ** 0.5 * 2.0
         qw = (m10 - m01) / s; qx = (m02 + m20) / s; qy = (m12 + m21) / s; qz = 0.25 * s
-    return DrawItem(0, centre, qx, qy, qz, qw, Vec3(lu * Real(0.5), Real(0.01), lv * Real(0.5), 0.0), color)
+    return tex(DrawItem(0, centre, qx, qy, qz, qw, Vec3(lu * Real(0.5), Real(0.01), lv * Real(0.5), 0.0), color), LAYER_HESSIAN)
 
 
 struct Frontier(Movable):
     var world: EmbedWorld
     var part: WorldPartition
     var spec_color: List[Vec3]  # parallel to part.specs
+    var spec_layer: List[Int]  # V2: each spec's texture layer, parallel to part.specs
     var walls: List[DrawItem]
     var player: DynamicCharacter
     var player_h: Int64
@@ -245,6 +282,7 @@ struct Frontier(Movable):
         self.world = EmbedWorld(1.0 / 60.0, G)
         self.part = WorldPartition(CELL, LOAD_R, UNLOAD_R)
         self.spec_color = List[Vec3]()
+        self.spec_layer = List[Int]()
         self.walls = List[DrawItem]()
         self.player_h = 0
         self.arm = SpringArm(8.0, 0.3, 0.12, 0.9)
@@ -286,6 +324,7 @@ struct Frontier(Movable):
         self.world = move.world^
         self.part = move.part^
         self.spec_color = move.spec_color^
+        self.spec_layer = move.spec_layer^
         self.walls = move.walls^
         self.player = move.player^
         self.player_h = move.player_h
@@ -318,18 +357,19 @@ struct Frontier(Movable):
 
     # ------------------------------------------------------------------------------------------------- building
 
-    def _spec(mut self, kind: Int, pos: Vec3, half: Vec3, mass: Real, color: Vec3) raises:
+    def _spec(mut self, kind: Int, pos: Vec3, half: Vec3, mass: Real, color: Vec3, layer: Int = LAYER_CONCRETE) raises:
         var is_static = mass == 0
         _ = self.part.add(BodySpec(
             kind, half, mass, is_static, WorldPos(Float64(pos[0]), Float64(pos[1]), Float64(pos[2])),
             Quat(0.0, 0.0, 0.0, 1.0), Vec3(0.0, 0.0, 0.0, 0.0), Vec3(0.0, 0.0, 0.0, 0.0),
         ))
         self.spec_color.append(color)
+        self.spec_layer.append(layer)
 
     def _wall(mut self, pos: Vec3, half: Vec3) raises:
         var h = self.world.add_box(pos, half, 0.0, True)
         self.world.set_layer(h, CAT_WORLD, ALL_LAYERS)
-        self.walls.append(DrawItem(0, pos, 0.0, 0.0, 0.0, 1.0, half, Vec3(0.3, 0.32, 0.38, 0.0)))
+        self.walls.append(tex(DrawItem(0, pos, 0.0, 0.0, 0.0, 1.0, half, Vec3(0.75, 0.75, 0.78, 0.0)), LAYER_BLOCKS))
 
     def _cell(mut self, ix: Int, iz: Int) raises:
         """The scenery of one cell. Positions keep 3 m clear of the cell's edge so a prop belongs to one cell."""
@@ -345,26 +385,26 @@ struct Frontier(Movable):
                 var z = Real(rng.span(z0 + 4, z0 + CELL - 4))
                 if abs(x) < 6 and abs(z) < 6:
                     continue  # the player starts here
-                self._spec(SPEC_BOX, Vec3(x, 2.0, z, 0.0), Vec3(0.5, 2.0, 0.5, 0.0), 0, Vec3(0.8, 0.82, 0.88, 0.0))
+                self._spec(SPEC_BOX, Vec3(x, 2.0, z, 0.0), Vec3(0.5, 2.0, 0.5, 0.0), 0, Vec3(0.95, 0.95, 1.0, 0.0), LAYER_BLOCKS)
         elif zone == ZONE_QUARRY:
             # rocks, and stacks of blocks to push over
             for _ in range(5):
                 var s = Real(rng.span(0.8, 2.2))
                 self._spec(SPEC_BOX, Vec3(Real(rng.span(x0 + 4, x0 + CELL - 4)), s * 0.7, Real(rng.span(z0 + 4, z0 + CELL - 4)), 0.0),
-                           Vec3(s, s * 0.7, s * 0.9, 0.0), 0, base * 0.75)
+                           Vec3(s, s * 0.7, s * 0.9, 0.0), 0, Vec3(0.85, 0.82, 0.78, 0.0), LAYER_CONCRETE)
             for _ in range(2):
                 var x = Real(rng.span(x0 + 5, x0 + CELL - 5))
                 var z = Real(rng.span(z0 + 5, z0 + CELL - 5))
                 for level in range(3):
-                    self._spec(SPEC_BOX, Vec3(x, 0.5 + Real(level), z, 0.0), Vec3(0.5, 0.5, 0.5, 0.0), 20.0, Vec3(0.85, 0.6, 0.3, 0.0))
+                    self._spec(SPEC_BOX, Vec3(x, 0.5 + Real(level), z, 0.0), Vec3(0.5, 0.5, 0.5, 0.0), 20.0, Vec3(1.0, 0.9, 0.8, 0.0), LAYER_PLANKS)
         elif zone == ZONE_CAMP:
             # posts, and balls that roll
             for _ in range(5):
                 self._spec(SPEC_BOX, Vec3(Real(rng.span(x0 + 4, x0 + CELL - 4)), 1.5, Real(rng.span(z0 + 4, z0 + CELL - 4)), 0.0),
-                           Vec3(0.15, 1.5, 0.15, 0.0), 0, Vec3(0.5, 0.35, 0.2, 0.0))
+                           Vec3(0.15, 1.5, 0.15, 0.0), 0, Vec3(1.0, 1.0, 1.0, 0.0), LAYER_BARK)
             for _ in range(4):
                 self._spec(SPEC_SPHERE, Vec3(Real(rng.span(x0 + 4, x0 + CELL - 4)), 0.5, Real(rng.span(z0 + 4, z0 + CELL - 4)), 0.0),
-                           Vec3(0.5, 0.5, 0.5, 0.0), 10.0, Vec3(0.9, 0.3, 0.3, 0.0))
+                           Vec3(0.5, 0.5, 0.5, 0.0), 10.0, Vec3(1.0, 0.55, 0.5, 0.0), LAYER_METAL)
         elif zone == ZONE_TOWN:
             # four buildings on a 2 by 2 grid, with streets between them
             for bx in range(2):
@@ -373,20 +413,23 @@ struct Frontier(Movable):
                     var hz = Real(rng.span(3.5, 5.5))
                     var hy = Real(rng.span(2.0, 7.0))
                     var shade = Real(rng.span(0.7, 1.1))
-                    self._spec(SPEC_BOX, Vec3(Real(x0 + 8.0 + 16.0 * Float64(bx)), hy, Real(z0 + 8.0 + 16.0 * Float64(bz)), 0.0),
-                               Vec3(hx, hy, hz, 0.0), 0, base * shade)
+                    var bpx = Real(x0 + 8.0 + 16.0 * Float64(bx))
+                    var bpz = Real(z0 + 8.0 + 16.0 * Float64(bz))
+                    var tint = Real(0.85) + Real(0.15) * shade / Real(1.1)
+                    self._spec(SPEC_BOX, Vec3(bpx, hy, bpz, 0.0), Vec3(hx, hy, hz, 0.0), 0, Vec3(tint, tint, tint * Real(0.97), 0.0),
+                               building_layer(bpx, bpz))
             for _ in range(2):
                 self._spec(SPEC_BOX, Vec3(Real(x0 + 16.0 + rng.span(-1.5, 1.5)), 0.4, Real(z0 + 16.0 + rng.span(-1.5, 1.5)), 0.0),
-                           Vec3(0.4, 0.4, 0.4, 0.0), 8.0, Vec3(0.3, 0.45, 0.8, 0.0))
+                           Vec3(0.4, 0.4, 0.4, 0.0), 8.0, Vec3(1.0, 0.95, 0.9, 0.0), LAYER_PLANKS)
         else:
             # low platforms and a few crates
             for _ in range(4):
                 var hx = Real(rng.span(1.5, 3.0))
                 self._spec(SPEC_BOX, Vec3(Real(rng.span(x0 + 5, x0 + CELL - 5)), 0.25, Real(rng.span(z0 + 5, z0 + CELL - 5)), 0.0),
-                           Vec3(hx, 0.25, hx, 0.0), 0, base * 0.8)
+                           Vec3(hx, 0.25, hx, 0.0), 0, Vec3(0.9, 0.88, 0.85, 0.0), LAYER_BLOCKS)
             for _ in range(2):
                 self._spec(SPEC_BOX, Vec3(Real(rng.span(x0 + 4, x0 + CELL - 4)), 0.5, Real(rng.span(z0 + 4, z0 + CELL - 4)), 0.0),
-                           Vec3(0.5, 0.5, 0.5, 0.0), 15.0, Vec3(0.9, 0.8, 0.3, 0.0))
+                           Vec3(0.5, 0.5, 0.5, 0.0), 15.0, Vec3(1.0, 0.95, 0.85, 0.0), LAYER_PLANKS)
 
     def _build(mut self) raises:
         self.player_h = pack_body(self.player.id)
@@ -542,7 +585,7 @@ struct Frontier(Movable):
             var c = zone_color(zone_of(Float64(cx), Float64(cz)))
             if (ix + iz) % 2 != 0:
                 c = c * 0.9
-            out.append(DrawItem(0, Vec3(cx, -0.04, cz, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(half_cell, 0.05, half_cell, 0.0), c))
+            out.append(tex(DrawItem(0, Vec3(cx, -0.04, cz, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(half_cell, 0.05, half_cell, 0.0), c), LAYER_GROUND))
         # props: a static one stands where its spec says, a dynamic one is read from the scene
         for i in range(len(self.part.specs)):
             if not self.part.live[i]:
@@ -558,7 +601,7 @@ struct Frontier(Movable):
             if self.culling and not fr.sphere_visible(pos, radius):
                 culled += 1
                 continue
-            out.append(DrawItem(0 if s.kind == SPEC_BOX else 1, pos, Float64(rot.x), Float64(rot.y), Float64(rot.z), Float64(rot.w), s.half, self.spec_color[i]))
+            out.append(tex(DrawItem(0 if s.kind == SPEC_BOX else 1, pos, Float64(rot.x), Float64(rot.y), Float64(rot.z), Float64(rot.w), s.half, self.spec_color[i]), self.spec_layer[i]))
         for w in self.walls:
             var r = sqrt(w.half[0] * w.half[0] + w.half[1] * w.half[1] + w.half[2] * w.half[2])
             if self.culling and not fr.sphere_visible(w.pos, r):
@@ -570,32 +613,32 @@ struct Frontier(Movable):
             for i in range(self.world.fracture.fragments()):
                 var fh = self.world.fragment_handle(i)
                 var fs = self.world.state(fh)
-                out.append(DrawItem(0, fs.pos, Float64(fs.rot.x), Float64(fs.rot.y), Float64(fs.rot.z), Float64(fs.rot.w),
-                                    Vec3(0.3, 0.3, 0.15, 0.0), Vec3(0.55, 0.5, 0.45, 0.0)))
+                out.append(tex(DrawItem(0, fs.pos, Float64(fs.rot.x), Float64(fs.rot.y), Float64(fs.rot.z), Float64(fs.rot.w),
+                                    Vec3(0.3, 0.3, 0.15, 0.0), Vec3(0.9, 0.88, 0.85, 0.0)), LAYER_CONCRETE))
         # B1: the pendulum: the anchor, the bob, and the rod between them (along the bob's local z, the hinge's lever)
         if self.pendulum_bob >= 0:
             var bs = self.world.state(self.pendulum_bob)
-            out.append(DrawItem(0, PENDULUM_PIVOT, 0.0, 0.0, 0.0, 1.0, Vec3(0.5, 0.5, 0.5, 0.0), Vec3(0.35, 0.3, 0.25, 0.0)))
-            out.append(DrawItem(1, bs.pos, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
-                                Vec3(PENDULUM_BOB_R, PENDULUM_BOB_R, PENDULUM_BOB_R, 0.0), Vec3(0.25, 0.25, 0.28, 0.0)))
+            out.append(tex(DrawItem(0, PENDULUM_PIVOT, 0.0, 0.0, 0.0, 1.0, Vec3(0.5, 0.5, 0.5, 0.0), Vec3(0.8, 0.8, 0.8, 0.0)), LAYER_METAL))
+            out.append(tex(DrawItem(1, bs.pos, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
+                                Vec3(PENDULUM_BOB_R, PENDULUM_BOB_R, PENDULUM_BOB_R, 0.0), Vec3(0.7, 0.7, 0.72, 0.0)), LAYER_METAL))
             var mid = (bs.pos + PENDULUM_PIVOT) * Real(0.5)
-            out.append(DrawItem(0, mid, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
-                                Vec3(0.1, 0.1, PENDULUM_LEN * Real(0.5), 0.0), Vec3(0.4, 0.35, 0.3, 0.0)))
+            out.append(tex(DrawItem(0, mid, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
+                                Vec3(0.1, 0.1, PENDULUM_LEN * Real(0.5), 0.0), Vec3(1.0, 1.0, 1.0, 0.0)), LAYER_PLANKS))
         # B2: the rope's beam, its segments (boxes along each capsule's axis) and its end ball
         if self.camp_built:
-            out.append(DrawItem(0, ROPE_TOP, 0.0, 0.0, 0.0, 1.0, Vec3(0.6, 0.1, 0.1, 0.0), Vec3(0.45, 0.35, 0.25, 0.0)))
+            out.append(tex(DrawItem(0, ROPE_TOP, 0.0, 0.0, 0.0, 1.0, Vec3(0.6, 0.1, 0.1, 0.0), Vec3(1.0, 1.0, 1.0, 0.0)), LAYER_PLANKS))
             for k in range(len(self.rope)):
                 var rs = self.world.state(self.rope[k])
                 if k < ROPE_SEGS:
-                    out.append(DrawItem(0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
-                                        Vec3(ROPE_R, ROPE_END, ROPE_R, 0.0), Vec3(0.7, 0.6, 0.4, 0.0)))
+                    out.append(tex(DrawItem(0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
+                                        Vec3(ROPE_R, ROPE_END, ROPE_R, 0.0), Vec3(1.0, 0.95, 0.85, 0.0)), LAYER_HESSIAN))
                 else:
-                    out.append(DrawItem(1, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
-                                        Vec3(ROPE_WEIGHT_R, ROPE_WEIGHT_R, ROPE_WEIGHT_R, 0.0), Vec3(0.3, 0.3, 0.32, 0.0)))
+                    out.append(tex(DrawItem(1, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
+                                        Vec3(ROPE_WEIGHT_R, ROPE_WEIGHT_R, ROPE_WEIGHT_R, 0.0), Vec3(0.7, 0.7, 0.72, 0.0)), LAYER_METAL))
         # B3: the banner's pole and its cells, each a thin box in the cell's own frame
         if self.flag:
-            out.append(DrawItem(0, FLAG_POLE + Vec3(0.0, 0.0, FLAG_H * Real(0.5), 0.0), 0.0, 0.0, 0.0, 1.0,
-                                Vec3(0.05, 0.05, FLAG_H * Real(0.5) + Real(0.1), 0.0), Vec3(0.35, 0.3, 0.25, 0.0)))
+            out.append(tex(DrawItem(0, FLAG_POLE + Vec3(0.0, 0.0, FLAG_H * Real(0.5), 0.0), 0.0, 0.0, 0.0, 1.0,
+                                Vec3(0.05, 0.05, FLAG_H * Real(0.5) + Real(0.1), 0.0), Vec3(1.0, 1.0, 1.0, 0.0)), LAYER_BARK))
             var xs = self.flag.value().x.copy()
             for j in range(FLAG_NZ):
                 for i in range(FLAG_NX):
@@ -614,8 +657,8 @@ struct Frontier(Movable):
                 half = Vec3(0.07, 0.28, 0.07, 0.0)
             elif i == 5:
                 half = Vec3(0.06, 0.25, 0.06, 0.0)
-            out.append(DrawItem(1 if i == 2 else 0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
-                                half, Vec3(0.85, 0.12, 0.1, 0.0)))
+            out.append(tex(DrawItem(1 if i == 2 else 0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
+                                half, Vec3(1.0, 0.45, 0.4, 0.0)), LAYER_HESSIAN))
         # the player is drawn by the host as a skinned character (plan W3), not here
         self.drawn = len(out)
         self.culled = culled
