@@ -218,6 +218,20 @@ struct StaticBox(Copyable, ImplicitlyCopyable, Movable):
     var h: Vec3
 
 
+def flag_grid() -> Tuple[List[Float32], List[UInt32]]:
+    """The banner's uv (u along x, v along z) and triangle indices: the cloth's own grid_mesh triangles."""
+    var g = grid_mesh(FLAG_NX, FLAG_NZ, FLAG_W, FLAG_H, FLAG_POLE)
+    var uv = List[Float32]()
+    for j in range(FLAG_NZ + 1):
+        for i in range(FLAG_NX + 1):
+            uv.append(Float32(i) / Float32(FLAG_NX))
+            uv.append(Float32(j) / Float32(FLAG_NZ))
+    var idx = List[UInt32]()
+    for t in g[1]:
+        idx.append(UInt32(t))
+    return (uv^, idx^)
+
+
 def _cell_item(p00: Vec3, p10: Vec3, p01: Vec3, p11: Vec3, color: Vec3) -> DrawItem:
     """A cloth cell drawn as a thin box: local x along the cell's u edge, local y along its normal, local z the third axis."""
     var centre = (p00 + p10 + p01 + p11) * Real(0.25)
@@ -281,6 +295,7 @@ struct Frontier(Movable):
     var rope_beam: Int64
     var flag: Optional[MeshCloth]  # B3: the banner, a cloth stepped in its own contact scene
     var flag_scene: ContactScene6[QuatBody6]
+    var flag_mesh: Int  # the banner's dynamic mesh in the host's renderer (ludens-engine#73); -1: drawn as cell boxes
     var flag_rest: List[Vec3]
     var rag: List[Int64]  # B4: the knocked-down figure's bodies (pelvis first)
     var rag_joints: List[Int]
@@ -319,6 +334,7 @@ struct Frontier(Movable):
         self.rope_ball = -1
         self.rope_beam = -1
         self.flag = None
+        self.flag_mesh = -1
         self.flag_scene = ContactScene6[QuatBody6]()
         self.flag_rest = List[Vec3]()
         self.rag = List[Int64]()
@@ -364,6 +380,7 @@ struct Frontier(Movable):
         self.rope_ball = move.rope_ball
         self.rope_beam = move.rope_beam
         self.flag = move.flag^
+        self.flag_mesh = move.flag_mesh
         self.flag_scene = move.flag_scene^
         self.flag_rest = move.flag_rest^
         self.rag = move.rag^
@@ -661,12 +678,16 @@ struct Frontier(Movable):
         if self.flag:
             out.append(tex(DrawItem(0, FLAG_POLE + Vec3(0.0, 0.0, FLAG_H * Real(0.5), 0.0), 0.0, 0.0, 0.0, 1.0,
                                 Vec3(0.05, 0.05, FLAG_H * Real(0.5) + Real(0.1), 0.0), Vec3(1.0, 1.0, 1.0, 0.0)), LAYER_BARK))
-            var xs = self.flag.value().x.copy()
-            for j in range(FLAG_NZ):
-                for i in range(FLAG_NX):
-                    var a = j * (FLAG_NX + 1) + i
-                    var c = a + FLAG_NX + 1
-                    out.append(_cell_item(xs[a], xs[a + 1], xs[c], xs[c + 1], Vec3(0.75, 0.15, 0.12, 0.0)))
+            if self.flag_mesh >= 0:  # one dynamic mesh, its vertices the cloth's particles (the host updates it)
+                out.append(DrawItem(0, Vec3(0.0, 0.0, 0.0, 0.0), 0.0, 0.0, 0.0, 1.0, Vec3(1.0, 1.0, 1.0, 0.0),
+                                    Vec3(0.75, 0.15, 0.12, 0.0), self.flag_mesh))
+            else:
+                var xs = self.flag.value().x.copy()
+                for j in range(FLAG_NZ):
+                    for i in range(FLAG_NX):
+                        var a = j * (FLAG_NX + 1) + i
+                        var c = a + FLAG_NX + 1
+                        out.append(_cell_item(xs[a], xs[a + 1], xs[c], xs[c + 1], Vec3(0.75, 0.15, 0.12, 0.0)))
         # B4: the knocked-down figure (red, as the guard); V5: the host draws CesiumMan on these bodies instead
         for i in range(len(self.rag) if self.rag_boxes else 0):
             var rs = self.world.state(self.rag[i])
@@ -684,6 +705,16 @@ struct Frontier(Movable):
         # the player is drawn by the host as a skinned character (plan W3), not here
         self.drawn = len(out)
         self.culled = culled
+        return out^
+
+    def flag_positions(self) -> List[Float32]:
+        """The banner's particle positions, 3 floats each (empty before the camp is built)."""
+        var out = List[Float32]()
+        if self.flag:
+            for p in self.flag.value().x:
+                out.append(Float32(Float64(p[0])))
+                out.append(Float32(Float64(p[1])))
+                out.append(Float32(Float64(p[2])))
         return out^
 
     # ------------------------------------------------------------------------------------------------- stepping
