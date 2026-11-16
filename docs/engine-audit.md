@@ -62,7 +62,7 @@ pipeline. This round migrated B1, B2, A1, A3 and B6; A2 did not fit the engine's
 | B5 crowd palettes | ludens-engine#87 (`PaletteTable`), #86 (`RenderCaps`), playground #103 | done | 12 / 24 | at 2000 members: 3924 -> 1207 palette matrices, tiers 40 / 120 / 1840, 0 dropped |
 | B8 fracture net state | ludens-core#130 (`quantize_rotation`, 17.93), playground #103 | done | 26 / 6 (the scratch world) | 73 fracture events; snapshot bytes 45158 / 2048 and 46085 / 2014, the same. Save and load of a fractured world: ludens-core#132 |
 | B7 ragdoll in an `EmbedWorld` | ludens-core#131 (`embed.ragdoll`, 17.94), playground (this PR) | done | 72 / 39 | `rag_skin_native` prints the same numbers to the last digit (pelvis joint to body 0.027036665 m standing, pelvis joint y 0.10121553 m after 2 s); ragdoll_check passes |
-| B4 asset formats and converters | ludens-engine #12 (comment) | open | 0 | the largest item (230 Mojo + 2029 Python); next round |
+| B4 asset formats and converters | ludens-engine#89 (`app/assets.mojo`, `scripts/assets/`, `lsoundToStereo`), playground #105 | done | 1,429 / 75 (`app/frontier_assets.mojo`, five converters, the page's .lsound decoder) | the 19 converted files and `build/page/assets` have the same sha256 as before; the 23 native suites print the same lines; 15 page checks pass. `retarget.py` stays (CesiumMan's bone map and hip ratio). Unused converters and assets: playground #106 |
 
 Removed from game code this round: 684 lines in the playground (B1 436, B2 97, A1 38, A3 45, B6 68) and 37 in the
 engine's `game/arena.mojo`, against 111 lines added in the playground (most of it the rope's draw and the pose
@@ -72,4 +72,5 @@ textured-primitive push and layer fallback in ludens-engine (#78).
 Second round (B9, A5, B10, B3, B11, B5, B8, B7): 710 lines removed from the playground, 380 added, 172 of which are
 A5's new blend. New engine API: `procedural.motion_match` (#129), `quantize_rotation` and fractured-world save / load
 (#130, #132), `embed.ragdoll` and `fit_group_boxes` (#131) in ludens-core; debug views (#84), `ao_bake` (#85),
-`RenderCaps` (#86), `PaletteTable` (#87) and dynamic meshes (#88) in ludens-engine. B4 is what remains.
+`RenderCaps` (#86), `PaletteTable` (#87) and dynamic meshes (#88) in ludens-engine. B4 followed: the asset formats, converters
+and the .lsound decoder moved to ludens-engine (#89), 1,429 lines out of the playground, 75 in.

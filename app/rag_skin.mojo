@@ -12,7 +12,7 @@ from std.math import sin, cos
 from geometry.mat import Mat4
 from geometry.vec import Real, Vec3
 from geometry.quat import Quat
-from frontier_assets import Character
+from app.assets import Character
 from app.foot_ik import _model_mats
 from app.skin_pass import palette_to_mats
 

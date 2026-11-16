@@ -2,4 +2,4 @@
 ludens-core ../ludens-core cb60d91e50a8d6f16035186d5d879e65e5d12c94
 wgpu-mojo ../wgpu-mojo 2575d9db9f4c
 miniaudio-mojo ../miniaudio-mojo/miniaudio-mojo a41e22425432
-ludens-engine ../ludens-engine a6d89940798fc2b9f4e623bb8238423d2d7a48de
+ludens-engine ../ludens-engine fe4f9d8d4407a4bf03d166f4f7aaaaee0be9748d

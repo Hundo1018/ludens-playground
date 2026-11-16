@@ -4,7 +4,7 @@
 # pose_palette_clip (the IK path changes nothing else).
 from std.math import sqrt
 from harness.runner import Suite
-from frontier_assets import parse_character, pose_palette_clip
+from app.assets import parse_character, pose_palette_clip
 from app.foot_ik import foot_ik, Slope, _model_mats, HIP_L, KNEE_L, ANKLE_L, HIP_R, KNEE_R, ANKLE_R
 from geometry.vec import Real
 

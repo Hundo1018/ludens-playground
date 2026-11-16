@@ -6,7 +6,7 @@ from harness.runner import Suite
 from wgpu import Instance
 from app.skin_gpu import GpuSkinning
 from app.skin_pass import cpu_skin, palette_to_mats
-from frontier_assets import Character, parse_character, pose_palette_frame, rest_palette
+from app.assets import Character, parse_character, pose_palette_frame, rest_palette
 from geometry.mat import Mat4
 from geometry.vec import Real, Vec3
 

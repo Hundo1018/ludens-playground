@@ -28,6 +28,7 @@ done
 # assets: fetched and verified against the manifest, converted to the engine's binary formats, then indexed
 python3 scripts/fetch_assets.py
 CONV=build/assets/converted
+EA=build/deps/ludens-engine/scripts/assets  # the engine's asset converters (ludens-engine#12)
 rm -rf "$CONV" && mkdir -p "$CONV" "$OUT/assets"
 # CesiumMan carries the rest clip (kind 100), three CMU subject-07 trials retargeted in place: walk (101, step 6.2), slow
 # walk (102), brisk walk (103), and three subject-38 trials for the matching database only (104 walk, 105 walk, 106 walk
@@ -40,22 +41,22 @@ python3 scripts/retarget.py --check-clips "$CONV/CesiumMan.lcharacter" build/ass
   "cmu07_walk=build/assets/src/07_01.amc" "cmu07_slow_walk=build/assets/src/07_04.amc:100:260:r" "cmu07_brisk_walk=build/assets/src/07_12.amc" \
   "cmu38_walk=build/assets/src/38_01.amc:80:1000:db@build/assets/src/38.asf" "cmu38_walk2=build/assets/src/38_02.amc:80:1000:db@build/assets/src/38.asf" "cmu38_walk_turns=build/assets/src/38_04.amc:80:1000:db@build/assets/src/38.asf" \
   "cmu16_run=build/assets/src/16_55.amc:60:360:db@build/assets/src/16.asf"
-python3 scripts/convert_glb.py build/assets/src/Fox.glb "$CONV/Fox.lcharacter"
-python3 scripts/convert_texture.py build/assets/src/concrete_wall_003_diff_1k.jpg "$CONV/concrete_wall_003.ltexture"
-python3 scripts/convert_texture.py build/assets/src/rocks_ground_01_diff_1k.jpg "$CONV/rocks_ground_01.ltexture"
-python3 scripts/extract_glb_texture.py build/assets/src/Fox.glb 0 "$CONV/fox_base.png"
-python3 scripts/convert_texture.py "$CONV/fox_base.png" "$CONV/fox_base.ltexture"
+python3 $EA/convert_glb.py build/assets/src/Fox.glb "$CONV/Fox.lcharacter"
+python3 $EA/convert_texture.py build/assets/src/concrete_wall_003_diff_1k.jpg "$CONV/concrete_wall_003.ltexture"
+python3 $EA/convert_texture.py build/assets/src/rocks_ground_01_diff_1k.jpg "$CONV/rocks_ground_01.ltexture"
+python3 $EA/extract_glb_texture.py build/assets/src/Fox.glb 0 "$CONV/fox_base.png"
+python3 $EA/convert_texture.py "$CONV/fox_base.png" "$CONV/fox_base.ltexture"
 # V1: CesiumMan's own base colour (its GLB embeds one JPEG, material 0); V2-V3: Poly Haven CC0 textures (assets/manifest.toml)
-python3 scripts/extract_glb_texture.py build/assets/src/CesiumMan.glb 0 "$CONV/cesium_base.png"
-python3 scripts/convert_texture.py "$CONV/cesium_base.png" "$CONV/cesium_base.ltexture"
+python3 $EA/extract_glb_texture.py build/assets/src/CesiumMan.glb 0 "$CONV/cesium_base.png"
+python3 $EA/convert_texture.py "$CONV/cesium_base.png" "$CONV/cesium_base.ltexture"
 LAYER_TEX="medieval_blocks_02 castle_brick_07 plastered_wall_02 brown_planks_03 bark_brown_02 hessian_230 rusty_metal_02"
-for t in $LAYER_TEX; do python3 scripts/convert_texture.py "build/assets/src/${t}_diff_1k.jpg" "$CONV/$t.ltexture"; done
+for t in $LAYER_TEX; do python3 $EA/convert_texture.py "build/assets/src/${t}_diff_1k.jpg" "$CONV/$t.ltexture"; done
 # W8: four CC0 effects from the archive in the manifest (sound_essential_retro_512), converted to 48 kHz mono .lsound
 SND="The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala/General Sounds"
-python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Menu Sounds/sfx_menu_select1.wav" "$CONV/sfx_menu_select1.lsound"
-python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Coins/sfx_coin_cluster1.wav" "$CONV/sfx_coin_cluster1.lsound"
-python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Simple Damage Sounds/sfx_damage_hit1.wav" "$CONV/sfx_damage_hit1.lsound"
-python3 scripts/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Positive Sounds/sfx_sounds_powerup1.wav" "$CONV/sfx_sounds_powerup1.lsound"
+python3 $EA/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Menu Sounds/sfx_menu_select1.wav" "$CONV/sfx_menu_select1.lsound"
+python3 $EA/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Coins/sfx_coin_cluster1.wav" "$CONV/sfx_coin_cluster1.lsound"
+python3 $EA/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Simple Damage Sounds/sfx_damage_hit1.wav" "$CONV/sfx_damage_hit1.lsound"
+python3 $EA/convert_wav.py build/assets/src/essential_retro_512.zip "$SND/Positive Sounds/sfx_sounds_powerup1.wav" "$CONV/sfx_sounds_powerup1.lsound"
 # the page ships these; nothing else in the converted directory
 for f in CesiumMan.lcharacter Fox.lcharacter concrete_wall_003.ltexture rocks_ground_01.ltexture fox_base.ltexture cesium_base.ltexture $(for t in $LAYER_TEX; do echo $t.ltexture; done) sfx_menu_select1.lsound sfx_coin_cluster1.lsound sfx_damage_hit1.lsound sfx_sounds_powerup1.lsound; do cp "$CONV/$f" "$OUT/assets/"; done
 cp build/deps/ludens-engine/shell/web/worklet.js "$OUT/"  # the engine's AudioWorklet ring player (W8)

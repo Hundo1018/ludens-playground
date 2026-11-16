@@ -10,7 +10,7 @@ from std.math import sin, cos
 from geometry.mat import Mat4
 from geometry.vec import Real, Vec2, Vec3
 from harness.runner import Suite
-from frontier_assets import parse_character, pose_palette_clip, strip_root_xz, Character
+from app.assets import parse_character, pose_palette_clip, strip_root_xz, Character
 from app.skin_pass import palette_to_mats
 from app.town_motion import TownMotion
 from app.town_blend import TownBlend, local_mats
