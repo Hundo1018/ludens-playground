@@ -1714,7 +1714,7 @@ def playground_host_town_motion(app: UInt64, which: Int32) abi("C") -> Int32:
         return Int32(101 + tm.kind(tn.guard))
     if which == 1 or which == 2:
         var n = 0
-        for a in range(len(tm.clip)):
+        for a in range(tm.agents()):
             if a == tn.guard:
                 continue
             var run = tm.kind(a) == 6

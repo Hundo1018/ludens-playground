@@ -26,8 +26,8 @@ def main() raises:
     var tm = TownMotion(c, 26)
     var run_speed = Real(0)
     var fastest_walk = Real(0)
-    for i in range(len(tm.mm.tracks)):
-        ref t = tm.mm.tracks[i]
+    for i in range(len(tm.m.mm.tracks)):
+        ref t = tm.m.mm.tracks[i]
         var n = t.frames
         var dx = t.hip[3 * (n - 1)] - t.hip[0]
         var dz = t.hip[3 * (n - 1) + 2] - t.hip[2]
@@ -37,8 +37,8 @@ def main() raises:
             run_speed = v
         elif v > fastest_walk:
             fastest_walk = v
-    var walk_hit = tm.mm.db.clip_of[tm.match(1.4, 0)]
-    var run_hit = tm.mm.db.clip_of[tm.match(7.0, 0)]
+    var walk_hit = tm.m.mm.db.clip_of[tm.match(1.4, 0)]
+    var run_hit = tm.m.mm.db.clip_of[tm.match(7.0, 0)]
     print("probe at 1.4 m/s matches kind", 101 + tm.kinds[walk_hit], "; at 7 m/s kind", 101 + tm.kinds[run_hit])
     s.check(tm.kinds[walk_hit] != RUN_KIND, "a probe at 1.4 m/s matches a walk (kind " + String(101 + tm.kinds[walk_hit]) + ")")
     s.check(tm.kinds[run_hit] == RUN_KIND, "a probe at 7 m/s matches the run (kind " + String(101 + tm.kinds[run_hit]) + ")")
@@ -49,7 +49,7 @@ def main() raises:
     var line = String("sweep:")
     for k in range(14):
         var v = Real(0.5) * Real(k + 1)
-        var kind = tm.kinds[tm.mm.db.clip_of[tm.match(v, 0)]]
+        var kind = tm.kinds[tm.m.mm.db.clip_of[tm.match(v, 0)]]
         line += " " + String(v) + "->" + String(101 + kind)
         if last >= 0 and kind != last:
             changes += 1
