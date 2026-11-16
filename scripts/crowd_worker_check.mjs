@@ -60,6 +60,6 @@ for (const n of [64, 200]) {
   need(run.ok && run.hash === hostHash, `worker and host agree for ${n} members over 300 ticks (worker ${run.hash}, host ${hostHash})`);
   console.log(`  worker stepped ${n} members x 300 ticks in ${run.ms ? run.ms.toFixed(1) : '?'} ms`);
 }
-need((await js('window.host.error')) === '', 'no page error');
+{ const pageErr = await js('window.host.error'); need(pageErr === '', `no page error (${pageErr || 'none'})`); }
 console.log(problems.length ? `crowd-worker-check: FAIL\n  ${problems.join('\n  ')}` : 'crowd-worker-check: PASS');
 done(problems.length ? 1 : 0);
