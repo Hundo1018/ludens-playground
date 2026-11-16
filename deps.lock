@@ -1,5 +1,5 @@
 # name  sibling-checkout  rev   (build/deps/<name> is a clean export of that rev; see scripts/deps.sh)
-ludens-core ../ludens-core 77c2563cc87c871ede131aa3563f320d92c8dd3b
+ludens-core ../ludens-core 6f05ab629359bc3dbe7ccf669d4a97e7dee32fb8
 wgpu-mojo ../wgpu-mojo 2575d9db9f4c
 miniaudio-mojo ../miniaudio-mojo/miniaudio-mojo a41e22425432
 ludens-engine ../ludens-engine a6d89940798fc2b9f4e623bb8238423d2d7a48de
