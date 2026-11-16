@@ -132,6 +132,8 @@ struct Host(Movable):
     var layer_tex: List[List[List[UInt8]]]  # V1-V3: textures for layers 4 and up, as the page sends them (empty until then)
     var layer_loaded: List[Bool]  # per layer: uploaded to the renderer
     var sphere_mesh: Int  # V2: the unit sphere a textured sphere is drawn with
+    var atmo_on: Bool  # V4: sky, fog and the linear workflow with tone mapping (the engine's set_atmosphere); ?noatmo turns it off
+    var skymark: Bool  # V4: the sky drawn magenta with fog off, for the visual check's sky mask
     var flatmark: Bool  # V0: every colour-only item (material 0) drawn magenta, so a capture can count them
     var wall_layers: Int  # V0: distinct texture layers on the building faces in the last frame
     var ik_yaws: List[Real]  # E2: the slow walk's facing yaw per frame (motion_match's track), filled once
@@ -206,6 +208,8 @@ struct Host(Movable):
         self.ik_raw_um = 0
         self.ik_frames = 0
         self.flatmark = False
+        self.skymark = False
+        self.atmo_on = True
         self.layer_tex = List[List[List[UInt8]]]()
         self.layer_loaded = List[Bool]()
         for _ in range(TEXTURE_LAYERS):
@@ -289,6 +293,8 @@ struct Host(Movable):
         self.ik_raw_um = move.ik_raw_um
         self.ik_frames = move.ik_frames
         self.flatmark = move.flatmark
+        self.skymark = move.skymark
+        self.atmo_on = move.atmo_on
         self.layer_tex = move.layer_tex^
         self.layer_loaded = move.layer_loaded^
         self.sphere_mesh = move.sphere_mesh
@@ -332,6 +338,23 @@ struct Host(Movable):
             self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=TEXTURE_LAYERS)  # frontier/world.mojo LAYER_*
         self._register()
         self.renderer.value().begin(view)
+        # V4: the atmosphere (sky gradient, fog toward the horizon colour, linear lighting with ACES) and the sky: a sphere
+        # 380 m across the camera (inside the 400 m far plane) with the engine's sky material
+        self.renderer.value().mesh.set_atmosphere(self.boot.device(), Vec3(Real(SKY_TOP_R), Real(SKY_TOP_G), Real(SKY_TOP_B), Real(0.0)),
+            Vec3(Real(SKY_HOR_R), Real(SKY_HOR_G), Real(SKY_HOR_B), Real(0.0)), Float32(FOG_DENSITY), Float32(EXPOSURE), self.atmo_on and not self.skymark, self.atmo_on and not self.skymark, Float32(SKY_CURVE))
+        if (self.atmo_on or self.skymark) and self.sphere_mesh >= 0:
+            var eye = m.camera().position
+            # skymark (the visual check): the sky drawn as a colour-only magenta sphere and no fog, so a capture can tell sky
+            # pixels from far ground by colour
+            var sky = DrawItem(1, eye, 0.0, 0.0, 0.0, 1.0, Vec3(Real(SKY_RADIUS), Real(SKY_RADIUS), Real(SKY_RADIUS), Real(0.0)),
+                               Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), -1, -1, 3, 0)
+            if self.skymark:
+                sky.color = Vec3(Real(1.0), Real(0.0), Real(1.0), Real(0.0))
+                sky.material = 1  # meshified with a material, then set to colour-only below
+            var mesh_sky = self._meshify(sky^)
+            if self.skymark:
+                mesh_sky.material = 0
+            self.renderer.value().push(mesh_sky^)
         # the mesh items that cast shadows: static meshes only (the skinned characters are not in the shadow pass yet)
         var shadow_items = List[DrawItem]()
         for it in m.scene():
@@ -809,6 +832,19 @@ struct Host(Movable):
             self.surface.present()
         self._finish_capture()
         return 1
+
+
+# V4: the atmosphere. The horizon colour is the fog's: far ground fades into the sky at the horizon.
+comptime SKY_TOP_R = 0.22
+comptime SKY_TOP_G = 0.42
+comptime SKY_TOP_B = 0.80
+comptime SKY_HOR_R = 0.76
+comptime SKY_HOR_G = 0.82
+comptime SKY_HOR_B = 0.90
+comptime FOG_DENSITY = 0.005  # per metre: 1 - exp(-0.005 d) is 0.22 at 50 m, 0.63 at 200 m, 0.72 at the border (256 m)
+comptime EXPOSURE = 1.0
+comptime SKY_CURVE = 0.35  # the sky leaves the horizon colour within a few degrees of elevation
+comptime SKY_RADIUS = 380.0
 
 
 # E2: the hub's two ramps (foot IK on at x 4, off at x 9), their centre height and angle
@@ -1696,6 +1732,18 @@ def playground_host_foot_ik(app: UInt64, which: Int32) abi("C") -> Int32:
     if which == 2:
         return Int32(h.ik_frames)
     return -1
+
+
+@export
+def playground_host_atmo(app: UInt64, on: Int32) abi("C"):
+    """V4: the atmosphere (sky, fog, linear lighting and tone mapping) on or off. On by default; ?noatmo turns it off."""
+    _host(app)[].atmo_on = on != 0
+
+
+@export
+def playground_host_skymark(app: UInt64, on: Int32) abi("C"):
+    """V4: draw the sky as a magenta colour-only sphere with fog off, so a capture can tell sky from far ground."""
+    _host(app)[].skymark = on != 0
 
 
 @export
