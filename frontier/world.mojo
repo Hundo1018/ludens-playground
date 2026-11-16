@@ -29,6 +29,7 @@ from physics.rigid6 import QuatBody6, Inertia3
 from physics.solver6 import ContactScene6
 from physics.cloth import MeshCloth, grid_mesh
 from physics.rope import Rope
+from procedural.ik_pose import shortest_arc
 from embed.world import unpack_body
 from procedural.camera_math import CameraPose, Frustum
 from std.math import sqrt
