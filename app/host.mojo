@@ -28,7 +28,8 @@ from app.debug_view import DEBUG_NONE, DEBUG_FLAT, DEBUG_SKY
 from app.foot_ik import foot_ik, Slope
 from app.rag_skin import rag_palette, pose_mat, placement
 from geometry.mat import Mat4
-from frontier.world import TEXTURE_LAYERS, LAYER_CESIUM, LAYER_PLANKS, LAYER_CONCRETE, tex
+from frontier.world import TEXTURE_LAYERS, LAYER_CESIUM, LAYER_PLANKS, LAYER_CONCRETE, tex, flag_grid
+from app.mesh_pass import vertex_normals
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow, positions_hash
@@ -128,6 +129,7 @@ struct Host(Movable):
     var ext_rows: List[CrowdRow]  # W11: the worker's rows for this frame
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var town_motion: Optional[TownMotion]  # E1: the town's characters' clips by motion matching on their velocity
+    var flag_idx: List[UInt32]  # the banner mesh's triangles (ludens-engine#73)
     var town_blend: Optional[TownBlend]  # A5: their poses and yaw blended across switches and loop wraps
     var ik_worst_um: Int  # E2: the worst foot error on the hub's ramp with foot IK, micrometres, since the start
     var ik_raw_um: Int  # E2: the same without IK
@@ -210,6 +212,7 @@ struct Host(Movable):
         self.town = None
         self.town_motion = None
         self.town_blend = None
+        self.flag_idx = List[UInt32]()
         self.ik_worst_um = 0
         self.ik_raw_um = 0
         self.ik_frames = 0
@@ -297,6 +300,7 @@ struct Host(Movable):
         self.town = move.town^
         self.town_motion = move.town_motion^
         self.town_blend = move.town_blend^
+        self.flag_idx = move.flag_idx^
         self.ik_worst_um = move.ik_worst_um
         self.ik_raw_um = move.ik_raw_um
         self.ik_frames = move.ik_frames
@@ -360,6 +364,15 @@ struct Host(Movable):
             self.renderer.value().push(sky^)
         # the scene's mesh items cast shadows: push turns every textured primitive into one (ludens-engine#78), so they are
         # the items it added for the scene that have a mesh
+        # the camp banner as one dynamic mesh whose vertices are the cloth's particles (ludens-engine#73)
+        var fp = m.world.flag_positions()
+        if len(fp) > 0:
+            if m.world.flag_mesh < 0:
+                var g = flag_grid()
+                self.flag_idx = g[1].copy()
+                m.world.flag_mesh = self.renderer.value().meshes.add_dynamic(fp.copy(), vertex_normals(fp, self.flag_idx), g[0].copy(), self.flag_idx.copy())
+            else:
+                self.renderer.value().meshes.update_dynamic(m.world.flag_mesh, fp.copy(), vertex_normals(fp, self.flag_idx))
         var first = len(self.renderer.value().items)
         for it in m.scene():
             self.renderer.value().push(it.copy())  # every scene item carries its texture layer (frontier/world.mojo)
