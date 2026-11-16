@@ -12,7 +12,7 @@ agents jumped frames on about half their queries). The drawn model is turned abo
 along the agent's velocity; an agent standing still keeps its last heading.
 """
 from geometry.vec import Real, Vec2
-from frontier_assets import Character
+from app.assets import Character
 from app.motion_match import build_match
 from procedural.motion_match import MotionMatcher, MotionSwitch
 

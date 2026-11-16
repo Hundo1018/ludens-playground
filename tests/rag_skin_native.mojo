@@ -7,7 +7,7 @@ from harness.runner import Suite
 from geometry.mat import Mat4
 from geometry.vec import Real, Vec3
 from frontier.world import Frontier
-from frontier_assets import parse_character
+from app.assets import parse_character
 from app.rag_skin import pose_mat, placement, rigid_inverse, joint_body
 from app.foot_ik import _model_mats
 

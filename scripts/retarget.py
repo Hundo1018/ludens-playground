@@ -19,7 +19,7 @@ import math
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "build/deps/ludens-engine/scripts/assets"))  # ludens-engine#12
 import convert_glb as cg  # noqa: E402
 import motion_fk as mf  # noqa: E402
 

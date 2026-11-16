@@ -20,7 +20,7 @@ from app.net_fracture import FractureNetResult, run_fracture_session
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
-from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame, pose_palette_clip
+from app.assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame, pose_palette_clip
 from motion_match import build_match, m6_hash, _track as motion_track
 from app.town_motion import TownMotion
 from app.town_blend import TownBlend

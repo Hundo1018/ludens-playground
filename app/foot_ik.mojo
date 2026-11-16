@@ -23,7 +23,7 @@ from geometry.mat import Mat3
 from procedural.anim_graph import Pose
 from procedural.ik_pose import two_bone_pose, rotate_subtree
 from procedural.ik import foot_plant
-from frontier_assets import Character, locals_at, strip_root_xz
+from app.assets import Character, locals_at, strip_root_xz
 from app.skin_pass import palette_to_mats
 
 comptime HIP_L = 11

@@ -13,7 +13,7 @@ from std.math import pi
 from geometry.mat import Mat4
 from geometry.quat import Quat
 from geometry.vec import Real
-from frontier_assets import Character, strip_root_xz
+from app.assets import Character, strip_root_xz
 from app.skin_pass import build_palette_root, palette_to_mats
 from app.town_motion import TownMotion
 from procedural.inertialize import Inertializer
@@ -49,7 +49,7 @@ def sample(clip: List[Float32], frame: Int, joints: Int) -> LocalPose:
 
 
 def local_mats(p: LocalPose, joints: Int) -> List[Mat4]:
-    """T * R * S per joint, as frontier_assets.trs builds it."""
+    """T * R * S per joint, as app.assets.trs builds it."""
     var out = List[Mat4]()
     for j in range(joints):
         var q = Quat(p.rot[4 * j], p.rot[4 * j + 1], p.rot[4 * j + 2], p.rot[4 * j + 3])

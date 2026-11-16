@@ -8,7 +8,7 @@ HIP's translation, the facing is read from the two hip joints (see `_track`). Th
 from std.math import sqrt
 from geometry.mat import Mat4
 from geometry.vec import Real, Vec3
-from frontier_assets import Character, locals_at
+from app.assets import Character, locals_at
 from app.skin_pass import palette_to_mats
 from procedural.motion_match import MotionTrack, MotionMatchDB
 

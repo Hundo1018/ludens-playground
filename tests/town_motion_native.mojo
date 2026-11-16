@@ -8,7 +8,7 @@
 #   the slow ones on walks; switches are counted (printed, with the queries made).
 from std.math import sqrt, atan2, sin, cos
 from harness.runner import Suite
-from frontier_assets import parse_character
+from app.assets import parse_character
 from app.town_motion import TownMotion, RUN_KIND
 from geometry.vec import Real, Vec2
 

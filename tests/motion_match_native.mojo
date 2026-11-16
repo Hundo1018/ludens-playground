@@ -5,7 +5,7 @@
 # 107 run 16_55 (subject 16).
 from std.math import atan2
 from harness.runner import Suite
-from frontier_assets import parse_character
+from app.assets import parse_character
 from app.motion_match import build_match, m6_rows, m6_hash, m6_hash_of
 from geometry.vec import Real
 

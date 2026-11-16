@@ -3,7 +3,7 @@
 import { instantiate } from "./host.mjs";
 import { createImports as wgpuImports } from "./webgpu_host.mjs";
 import { Runtime } from "./webgpu_runtime.mjs";
-import { loadAsset, stageAsset } from "./assets.mjs";
+import { loadAsset, stageAsset, lsoundToStereo } from "./assets.mjs";
 import { mountVirtualPad } from "./vpad_view.js";
 
 const params = new URLSearchParams(location.search);
@@ -71,25 +71,11 @@ function crowdWorkerFrame() {
     stats.crowdRows = (stats.crowdRows || 0) + 1;
   }).catch((e) => { stats.error = "crowd worker: " + String(e); }).finally(() => { crowdWorker.busy = false; });
 }
-// W8: the four sounds. Each .lsound (scripts/convert_wav.py: "LSND", version, header length, JSON header, int16 mono
+// W8: the four sounds. Each .lsound (ludens-engine scripts/assets/convert_wav.py: "LSND", version, header length, JSON header, int16 mono
 // frames) is decoded to stereo f32 and registered on the host's audio scene. The first is the menu select, the second the
 // coin cluster, which plays when a zone goal is reached (GOAL_SOUND).
 const SOUNDS = ["sfx_menu_select1.lsound", "sfx_coin_cluster1.lsound", "sfx_damage_hit1.lsound", "sfx_sounds_powerup1.lsound"];
 const GOAL_SOUND = 1;
-function lsoundToStereo(bytes) {
-  const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-  if (magic !== "LSND") throw new Error("not an .lsound file");
-  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const off = 12 + dv.getUint32(8, true);
-  const n = (bytes.byteLength - off) >> 1;
-  const out = new Float32Array(n * 2);
-  for (let i = 0; i < n; i++) {
-    const v = dv.getInt16(off + 2 * i, true) / 32768;
-    out[2 * i] = v;
-    out[2 * i + 1] = v;
-  }
-  return out;
-}
 async function loadSounds(rt, x, app, index) {
   if (x.playground_host_audio_init(app) !== 0) throw new Error("playground_host_audio_init failed");
   const ids = [];

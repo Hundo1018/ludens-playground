@@ -4,7 +4,7 @@
 # The expected values were measured with the playground's app/motion_match.mojo and app/town_motion.mojo before the move.
 from std.math import sin, cos
 from harness.runner import Suite
-from frontier_assets import parse_character
+from app.assets import parse_character
 from app.town_motion import TownMotion
 from app.motion_match import build_match, m6_hash
 from geometry.vec import Real, Vec2
