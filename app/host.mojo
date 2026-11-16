@@ -21,8 +21,9 @@ from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
 from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame, pose_palette_clip
-from motion_match import build_match, m6_hash
+from motion_match import build_match, m6_hash, _track as motion_track
 from app.town_motion import TownMotion
+from app.foot_ik import foot_ik, Slope
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow, positions_hash
@@ -123,6 +124,10 @@ struct Host(Movable):
     var ext_rows: List[CrowdRow]  # W11: the worker's rows for this frame
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
     var town_motion: Optional[TownMotion]  # E1: the town's characters' clips by motion matching on their velocity
+    var ik_worst_um: Int  # E2: the worst foot error on the hub's ramp with foot IK, micrometres, since the start
+    var ik_raw_um: Int  # E2: the same without IK
+    var ik_frames: Int
+    var ik_yaws: List[Real]  # E2: the slow walk's facing yaw per frame (motion_match's track), filled once
     var contacts: Int  # W6: the guard touched the player (the player is sent back to the hub)
     var reset_player: Bool  # W6: set by a contact this frame, acted on after the draw
     var knock_pending: Bool  # B4: a contact this frame knocks the guard down (a figure on ball joints in its place)
@@ -190,6 +195,10 @@ struct Host(Movable):
         self.crowd = None
         self.town = None
         self.town_motion = None
+        self.ik_worst_um = 0
+        self.ik_raw_um = 0
+        self.ik_frames = 0
+        self.ik_yaws = List[Real]()
         self.crowd_ext = False
         self.ext_rows = List[CrowdRow]()
         self.contacts = 0
@@ -261,6 +270,10 @@ struct Host(Movable):
         self.ext_rows = move.ext_rows.copy()
         self.town = move.town^
         self.town_motion = move.town_motion^
+        self.ik_worst_um = move.ik_worst_um
+        self.ik_raw_um = move.ik_raw_um
+        self.ik_frames = move.ik_frames
+        self.ik_yaws = move.ik_yaws^
         self.contacts = move.contacts
         self.reset_player = move.reset_player
         self.knock_pending = move.knock_pending
@@ -532,6 +545,34 @@ struct Host(Movable):
                     town_yaw.append(0.0)
                 town_rows.append(tn.crowd.pos[k])
             self.town = tn^
+        # E2: two CesiumMen on 20 degree ramps in the hub, walking in place uphill along +x: foot IK on (x 4), off (x 9)
+        var ik_bases = List[Int]()
+        var ik_yaw = Float64(0)
+        if len(c.motion) > 1:
+            ref clip = c.motion[1]  # the slow walk (kind 102)
+            var nfr = len(clip) // (10 * c.joint_count)
+            var fr = Int(self.clock * Float64(c.fps)) % nfr
+            if len(self.ik_yaws) != nfr:
+                var cc = c.copy()
+                cc.clip = clip.copy()
+                cc.frames = nfr
+                var t = motion_track(cc)
+                self.ik_yaws = List[Real]()
+                for f in range(nfr):
+                    self.ik_yaws.append(atan2(t.facing[2 * f], t.facing[2 * f + 1]))
+            var cy = Float64(self.ik_yaws[fr])
+            ik_yaw = 1.5707963267948966 - cy  # the clip frame's facing onto +x
+            var slope = Slope(Real(IK_RAMP_DEG * 3.141592653589793 / 180.0), Real(ik_yaw), Real(1.0), Real(0.0))
+            for side in range(2):
+                if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
+                    break
+                var r = foot_ik(c, clip, fr, slope, side == 0)
+                if side == 0:
+                    self.ik_worst_um = max(self.ik_worst_um, Int(max(abs(r.err_l), abs(r.err_r)) * 1e6))
+                    self.ik_raw_um = max(self.ik_raw_um, Int(max(abs(r.raw_l), abs(r.raw_r)) * 1e6))
+                    self.ik_frames += 1
+                ik_bases.append(len(pal) // 16)
+                pal.extend(r.palette.copy())
         self.palette_used = len(pal) // 16
         self.renderer.value().skin_palette = pal^
         # the Fox walks a circle of radius 6 m round the hub's centre and faces its direction of travel (a yaw about +Y;
@@ -586,6 +627,23 @@ struct Host(Movable):
                 Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
                 Vec3(Real(0.85), Real(0.12), Real(0.1), Real(0.0)) if k == town_guard else Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
                 self.skin_cesium, town_bases[k], 0,
+            ))
+        # E2: the ramps (each a thin box turned about +z so its top rises 20 degrees along +x through the walker's feet)
+        # and the two walkers, the IK one tinted green, the plain one grey
+        var th = IK_RAMP_DEG * 3.141592653589793 / 180.0
+        for side in range(len(ik_bases)):
+            var base = Vec3(Real(IK_RAMP_X0 if side == 0 else IK_RAMP_X1), Real(IK_RAMP_Y), Real(IK_RAMP_Z), Real(0.0))
+            var normal = Vec3(Real(-sin(th)), Real(cos(th)), Real(0.0), Real(0.0))
+            self.renderer.value().push(DrawItem(
+                0, base - normal * Real(0.05), 0.0, 0.0, sin(th * 0.5), cos(th * 0.5),
+                Vec3(Real(1.6), Real(0.05), Real(0.8), Real(0.0)), Vec3(Real(0.45), Real(0.4), Real(0.35), Real(0.0)),
+            ))
+            var hy = ik_yaw * 0.5
+            self.renderer.value().push(DrawItem(
+                -1, base, 0.0, sin(hy), 0.0, cos(hy),
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
+                Vec3(Real(0.6), Real(0.9), Real(0.6), Real(0.0)) if side == 0 else Vec3(Real(0.7), Real(0.7), Real(0.7), Real(0.0)),
+                self.skin_cesium, ik_bases[side], 0,
             ))
 
     def _capture(mut self, format: UInt32) raises:
@@ -698,6 +756,14 @@ struct Host(Movable):
             self.surface.present()
         self._finish_capture()
         return 1
+
+
+# E2: the hub's two ramps (foot IK on at x 4, off at x 9), their centre height and angle
+comptime IK_RAMP_X0 = 4.0
+comptime IK_RAMP_X1 = 9.0
+comptime IK_RAMP_Y = 0.6
+comptime IK_RAMP_Z = -8.0
+comptime IK_RAMP_DEG = 20.0
 
 
 # the skinned palette holds this many matrices (the engine's limit); a member takes one matrix per joint
@@ -1559,6 +1625,20 @@ def playground_host_town_motion(app: UInt64, which: Int32) abi("C") -> Int32:
     if which == 4:
         var v = tn.crowd.vel[tn.guard]
         return Int32(Int(((v[0] * v[0] + v[1] * v[1]) ** 0.5) * 1000.0))
+    return -1
+
+
+@export
+def playground_host_foot_ik(app: UInt64, which: Int32) abi("C") -> Int32:
+    """E2: the hub's ramp walkers. 0 the worst foot error with IK since the start, 1 without IK (micrometres), 2 the
+    frames evaluated (drawn frames)."""
+    ref h = _host(app)[]
+    if which == 0:
+        return Int32(h.ik_worst_um)
+    if which == 1:
+        return Int32(h.ik_raw_um)
+    if which == 2:
+        return Int32(h.ik_frames)
     return -1
 
 
