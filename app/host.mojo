@@ -30,6 +30,7 @@ from app.rag_skin import rag_palette, pose_mat, placement
 from geometry.mat import Mat4
 from frontier.world import TEXTURE_LAYERS, LAYER_CESIUM, LAYER_PLANKS, LAYER_CONCRETE, tex, flag_grid
 from app.mesh_pass import vertex_normals
+from app.palette_table import PaletteTable
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow, positions_hash
@@ -567,34 +568,45 @@ struct Host(Movable):
             self.tier_near = 0
             self.tier_mid = 0
             self.tier_far = 0
-            var table_base = -1
+            # B5 (ludens-engine#71, #87): the crowd's poses go through the engine's PaletteTable, keyed by the walk clip's
+            # frame, so members (near, mid and the far table's slots) that show the same frame share one copy of it
+            var table = PaletteTable(PALETTE_MATRICES)
+            table.begin()
+            _ = table.add(-1, pal)  # the characters above, at base 0 as before
+            var slot_bases = List[Int]()
             for j in range(len(order)):
                 var k = order[j]
                 if j < NEAR_TIER + MID_TIER:
-                    if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
+                    var fr = (Int(self.clock * Float64(c.fps)) + crowd_rows[k].offset) % c.frames
+                    var b = table.find(fr)
+                    if b < 0:
+                        b = table.add(fr, pose_palette_frame(c, fr))
+                    if b < 0:
                         self.palette_dropped += len(order) - j
                         break
-                    var fr = (Int(self.clock * Float64(c.fps)) + crowd_rows[k].offset) % c.frames
-                    crowd_bases.append(len(pal) // 16)
+                    crowd_bases.append(b)
                     crowd_idx.append(k)
-                    pal.extend(pose_palette_frame(c, fr))
                     if j < NEAR_TIER:
                         self.tier_near += 1
                     else:
                         self.tier_mid += 1
                 else:
-                    if table_base < 0:
-                        if len(pal) // 16 + TABLE_FRAMES * c.joint_count > PALETTE_MATRICES:
-                            self.palette_dropped += len(order) - j
-                            break
-                        table_base = len(pal) // 16
+                    if len(slot_bases) == 0:
                         var now = Int(self.clock * Float64(c.fps))
                         for tf in range(TABLE_FRAMES):
-                            pal.extend(pose_palette_frame(c, (now + tf * c.frames // TABLE_FRAMES) % c.frames))
+                            var tfr = (now + tf * c.frames // TABLE_FRAMES) % c.frames
+                            var tb = table.find(tfr)
+                            if tb < 0:
+                                tb = table.add(tfr, pose_palette_frame(c, tfr))
+                            slot_bases.append(tb)
+                        if -1 in slot_bases:
+                            self.palette_dropped += len(order) - j
+                            break
                     var slot = ((crowd_rows[k].offset % TABLE_FRAMES) + TABLE_FRAMES) % TABLE_FRAMES
-                    crowd_bases.append(table_base + slot * c.joint_count)
+                    crowd_bases.append(slot_bases[slot])
                     crowd_idx.append(k)
                     self.tier_far += 1
+            pal = table.palette.copy()
         # the town (plan stage 3): 24 residents and the guard, each a CesiumMan at its ORCA position, its clip phase spread
         var town_rows = List[Vec3]()
         var town_bases = List[Int]()

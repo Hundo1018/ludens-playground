@@ -41,7 +41,7 @@ for (const n of counts) {
   for (let i = 0; i < 600; i++) {
     const st = await js('({ frames: window.host && window.host.frames, assets: window.host && window.host.assets, error: window.host && window.host.error })');
     if (st && st.error) { rows.push({ n, status: `refused: ${st.error}` }); ready = null; break; }
-    if (st && st.assets === 5 && st.frames >= 10) { ready = true; break; }  // the five converted assets (host_check)
+    if (st && st.assets >= 5 && st.frames >= 10) { ready = true; break; }  // the converted assets (host_check; V1 added texture layers)
     await sleep(100);
   }
   if (ready === null) continue;

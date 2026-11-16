@@ -12,14 +12,14 @@ the physics (SnapshotClient only displays), so their welds stay as built and do 
 
 A client's hash is computed from its own world (EmbedWorld.state read back after the teleport), not from the received
 bytes, so a pose that does not survive the round trip shows up as a hash mismatch. teleport normalises the rotation, and
-a hand-written normalisation can round differently from the engine's (measured: 2 of 160 rotation integers off by one),
-so the server computes each rotation's integers through the engine's own teleport on a one-body scratch world until they
-map to themselves: the client's teleport and read-back then give the same integers.
+plain rounding does not survive it (measured: 2 of 160 rotation integers off by one), so the server quantises each
+rotation with ludens-core's embed.world.quantize_rotation (ludens-engine#75, ROADMAP 17.93), whose integers are a fixed
+point of dequantise -> teleport -> state -> round.
 """
 from std.math import sqrt
 from geometry.vec import Real, Vec3
 from geometry.quat import Quat
-from embed.world import EmbedWorld
+from embed.world import EmbedWorld, quantize_rotation, dequantize_rotation
 from gameplay.netcode import NetSim, PlayerInput, SnapshotServer, SnapshotClient, SimLink
 
 comptime NC = 2  # clients (the baseline: the server and both clients)
@@ -48,22 +48,6 @@ def _rot_ints(q: Quat) -> List[Int]:
     return r^
 
 
-def _rot_of(r: List[Int]) -> Quat:
-    return Quat(Real(r[0]) / ROT_SCALE, Real(r[1]) / ROT_SCALE, Real(r[2]) / ROT_SCALE, Real(r[3]) / ROT_SCALE)
-
-
-def _fixed_rot(mut scratch: EmbedWorld, body: Int64, q: Quat) raises -> List[Int]:
-    """The rotation as four integers (times 1e6) that the client's path maps to themselves: divide by 1e6, teleport
-    (which normalises), read back, round. The path runs through the engine's own teleport, so the server and the client
-    compute it with the same code."""
-    var r = _rot_ints(q)
-    for _ in range(8):
-        scratch.teleport(body, Vec3(0.0, 0.0, 0.0, 0.0), _rot_of(r))
-        var n = _rot_ints(scratch.state(body).rot)
-        if n[0] == r[0] and n[1] == r[1] and n[2] == r[2] and n[3] == r[3]:
-            break
-        r = n^
-    return r^
 
 
 struct FractureSim(NetSim):
@@ -73,8 +57,6 @@ struct FractureSim(NetSim):
     var frags: List[Int64]
     var crate: Int64  # -1 until fired
     var events: Int  # fracture events since the start (stepped on the server; carried in the state)
-    var scratch: EmbedWorld  # the server's one-body world for _fixed_rot (never stepped)
-    var scratch_body: Int64
     var snap: List[Int]  # the server's state integers after its latest step (empty on a client)
 
     def __init__(out self, count: Int) raises:
@@ -88,8 +70,6 @@ struct FractureSim(NetSim):
             self.frags.append(self.world.fragment_handle(i))
         self.crate = -1
         self.events = 0
-        self.scratch = EmbedWorld(1.0 / 60.0, Vec3(0.0, 0.0, 0.0, 0.0))
-        self.scratch_body = self.scratch.add_box(Vec3(0.0, 0.0, 0.0, 0.0), Vec3(0.5, 0.5, 0.5, 0.0), 1.0, False)
         self.snap = List[Int]()
 
     def players(self) -> Int:
@@ -117,7 +97,7 @@ struct FractureSim(NetSim):
         out.append(Int(round(st.pos[1] * 1000.0)))
         out.append(Int(round(st.pos[2] * 1000.0)))
         if fixed:
-            out.extend(_fixed_rot(self.scratch, self.scratch_body, st.rot))
+            out.extend(quantize_rotation(st.rot, ROT_SCALE))
         else:
             out.extend(_rot_ints(st.rot))
 
@@ -237,7 +217,7 @@ def _read_pose(data: List[UInt8], mut pos: Int) raises -> Tuple[Vec3, Quat]:
     var r = List[Int]()
     for _ in range(4):
         r.append(_get(data, pos))
-    return (Vec3(x, y, z, 0.0), _rot_of(r))
+    return (Vec3(x, y, z, 0.0), dequantize_rotation(r, ROT_SCALE))
 
 
 def _put(mut out: List[UInt8], v: Int):
