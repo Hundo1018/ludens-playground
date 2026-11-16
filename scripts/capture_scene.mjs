@@ -1,6 +1,9 @@
 // Capture one offscreen frame of the playground page to a PNG (the page draws only when a capture is requested, so this
 // is the page's offscreen render path: the frame is rendered into an app-owned texture and read back).
 // usage: node scripts/capture_scene.mjs <chrome> <url> <out.png> [timeout_s=180]
+// Optional environment: PRE_JS, an expression awaited in the page before the capture (e.g. a teleport); THEN_JS and
+// THEN_OUT, an expression awaited after the first capture and a second PNG taken in the same session (the visual check
+// takes the normal frame, then the same frame with playground_host_flatmark on).
 // The page is ready when the five converted assets are up and at least ten frames have run (as in host_check).
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -42,6 +45,7 @@ for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.assets
 const err = await js('window.host && window.host.error');
 if (err) { console.log('capture-scene: page error: ' + err); done(1); }
 await sleep(1000);
+if (process.env.PRE_JS) console.log('capture-scene: pre:', JSON.stringify(await js(process.env.PRE_JS)));
 const GRAB = `(async () => {
   const s = window.host, x = s.x, app = s.app, c = document.querySelector('canvas');
   x.playground_host_request_capture(app);
@@ -52,13 +56,20 @@ const GRAB = `(async () => {
   let bin = ''; for (let i = 0; i < d.length; i += 8192) bin += String.fromCharCode(...d.subarray(i, i + 8192));
   return { w, h, pitch, b64: btoa(bin) };
 })()`;
-const r = await js(GRAB);
-if (!r) { console.log('capture-scene: capture never completed'); done(1); }
-const bytes = Buffer.from(r.b64, 'base64'); const rgba = new Uint8Array(r.w * r.h * 4);
-for (let y = 0; y < r.h; y++) for (let xx = 0; xx < r.w; xx++) {
-  const o = y * r.pitch + xx * 4, q = (y * r.w + xx) * 4;
-  rgba[q] = bytes[o]; rgba[q + 1] = bytes[o + 1]; rgba[q + 2] = bytes[o + 2]; rgba[q + 3] = 255;
+async function grabTo(path) {
+  const r = await js(GRAB);
+  if (!r) { console.log('capture-scene: capture never completed'); done(1); }
+  const bytes = Buffer.from(r.b64, 'base64'); const rgba = new Uint8Array(r.w * r.h * 4);
+  for (let y = 0; y < r.h; y++) for (let xx = 0; xx < r.w; xx++) {
+    const o = y * r.pitch + xx * 4, q = (y * r.w + xx) * 4;
+    rgba[q] = bytes[o]; rgba[q + 1] = bytes[o + 1]; rgba[q + 2] = bytes[o + 2]; rgba[q + 3] = 255;
+  }
+  writeFileSync(path, png(r.w, r.h, rgba));
+  console.log(`capture-scene: wrote ${path} (${r.w}x${r.h})`);
 }
-writeFileSync(out, png(r.w, r.h, rgba));
-console.log(`capture-scene: wrote ${out} (${r.w}x${r.h})`);
+await grabTo(out);
+if (process.env.THEN_JS && process.env.THEN_OUT) {
+  console.log('capture-scene: then:', JSON.stringify(await js(process.env.THEN_JS)));
+  await grabTo(process.env.THEN_OUT);
+}
 done(0);
