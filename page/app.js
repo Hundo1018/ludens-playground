@@ -115,6 +115,9 @@ let audioStarted = false;
 async function ensureAudio(rt, x, app) {
   if (audioStarted) return;
   audioStarted = true;
+  // The scene is made here too (idempotent): a key can come before loadSounds, which waits for every texture; the
+  // worklet's first top-up would otherwise find no scene and fail (the mix is silent until the clips arrive).
+  if (x.playground_host_audio_init(app) !== 0) throw new Error("playground_host_audio_init failed");
   const ctx = new AudioContext({ sampleRate: 48000 });
   await ctx.audioWorklet.addModule("./worklet.js");
   const node = new AudioWorkletNode(ctx, "ring-player", { outputChannelCount: [2], processorOptions: { capacity: 8192 } });
