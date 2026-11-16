@@ -25,6 +25,83 @@ source_page = "https://polyhaven.com/a/rocks_ground_01"
 changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; used as the ground texture"
 
 [[asset]]
+id = "tex_medieval_blocks_02"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/medieval_blocks_02/medieval_blocks_02_diff_1k.jpg"
+file = "medieval_blocks_02_diff_1k.jpg"
+sha256 = "91bc9f13dba69588efeaed86bd4490c4aae5d3381351a934e4d3fc5222c01a6c"
+license = "CC0-1.0"
+author = "Rob Tuytel (Poly Haven)"
+source_page = "https://polyhaven.com/a/medieval_blocks_02"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; a building face texture (V3: the wall textures rotate per building)"
+
+[[asset]]
+id = "tex_castle_brick_07"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/castle_brick_07/castle_brick_07_diff_1k.jpg"
+file = "castle_brick_07_diff_1k.jpg"
+sha256 = "86c90b92c19922e8f051f1130e45dbf1adc72aa0f51d7cb8aafa275dbec63937"
+license = "CC0-1.0"
+author = "Rob Tuytel (Poly Haven)"
+source_page = "https://polyhaven.com/a/castle_brick_07"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; a building face texture (V3)"
+
+[[asset]]
+id = "tex_plastered_wall_02"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/plastered_wall_02/plastered_wall_02_diff_1k.jpg"
+file = "plastered_wall_02_diff_1k.jpg"
+sha256 = "0a316ffd3f953a902325c06afb5a5863bbf71d13a353f9d85378562adca79603"
+license = "CC0-1.0"
+author = "Charlotte Baglioni (Poly Haven)"
+source_page = "https://polyhaven.com/a/plastered_wall_02"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; a building face texture (V3)"
+
+[[asset]]
+id = "tex_brown_planks_03"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brown_planks_03/brown_planks_03_diff_1k.jpg"
+file = "brown_planks_03_diff_1k.jpg"
+sha256 = "8dfae22286fa9bb0ed62ce7326e8bc14c284e567d38fd64b5a453838080ecf19"
+license = "CC0-1.0"
+author = "Rob Tuytel (Poly Haven)"
+source_page = "https://polyhaven.com/a/brown_planks_03"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; crates, ramps, beams, the pendulum's rod (V2)"
+
+[[asset]]
+id = "tex_bark_brown_02"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/bark_brown_02/bark_brown_02_diff_1k.jpg"
+file = "bark_brown_02_diff_1k.jpg"
+sha256 = "920fa0bed0c9d78c1d530e99795113afd532d7db746de440f4a85d7c83ed0f1a"
+license = "CC0-1.0"
+author = "Rob Tuytel (Poly Haven)"
+source_page = "https://polyhaven.com/a/bark_brown_02"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; tree trunks and posts (V2)"
+
+[[asset]]
+id = "tex_hessian_230"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/hessian_230/hessian_230_diff_1k.jpg"
+file = "hessian_230_diff_1k.jpg"
+sha256 = "ef9ac1a0129b6d0f44b6d5beb68db7be7a0adf11e09fe52fd2cdc9370b27d4ba"
+license = "CC0-1.0"
+author = "colormass, Rico Cilliers (Poly Haven)"
+source_page = "https://polyhaven.com/a/hessian_230"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; the camp's banner and rope (V2)"
+
+[[asset]]
+id = "tex_rusty_metal_02"
+kind = "texture"
+url = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rusty_metal_02/rusty_metal_02_diff_1k.jpg"
+file = "rusty_metal_02_diff_1k.jpg"
+sha256 = "adaf094391518b6afe787a123942110aa88ef521c844f970b124420f5ed5d3d9"
+license = "CC0-1.0"
+author = "Rob Tuytel (Poly Haven)"
+source_page = "https://polyhaven.com/a/rusty_metal_02"
+changes = "resized to 256 and mipmapped (9 levels, rgba8) by scripts/convert_texture.py; the pendulum's bob and anchor, the goal markers (V2)"
+
+[[asset]]
 id = "char_cesiumman"
 kind = "character"
 url = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb"

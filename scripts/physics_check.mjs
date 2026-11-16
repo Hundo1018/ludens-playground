@@ -53,6 +53,6 @@ console.log(`bob z ${bobZ0} -> ${bobZ1} mm; ${events} fracture events; fragments
 need(Math.abs(bobZ1 - bobZ0) > 3000, `the bob swings toward the wall (z ${bobZ0} -> ${bobZ1} mm)`);
 need(events > 0, `the bob breaks the wall: a fracture event (${events})`);
 need(fragments > 1, `the wall is cut into fragments (${fragments})`);
-need((await js('window.host.error')) === '', 'no page error');
+{ const pageErr = await js('window.host.error'); need(pageErr === '', `no page error (${pageErr || 'none'})`); }
 console.log(problems.length ? `physics-check: FAIL\n  ${problems.join('\n  ')}` : 'physics-check: PASS');
 done(problems.length ? 1 : 0);

@@ -59,6 +59,6 @@ await host('playground_host_frontier_teleport', 0, 0);
 await host('playground_host_frontier_teleport', 112, -112);
 await sleep(800);
 need((await host('playground_host_audio_played')) === 1, 'a goal reached again does not start its sound again');
-need((await js('window.host.error')) === '', 'no page error');
+{ const pageErr = await js('window.host.error'); need(pageErr === '', `no page error (${pageErr || 'none'})`); }
 console.log(problems.length ? `audio-check: FAIL\n  ${problems.join('\n  ')}` : 'audio-check: PASS');
 done(problems.length ? 1 : 0);

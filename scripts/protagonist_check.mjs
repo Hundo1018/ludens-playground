@@ -61,6 +61,6 @@ const stopped = await snap();
 await sleep(600);
 const later = await snap();
 need(Math.abs(later.dh - stopped.dh) < 0.01, 'after the player stops, the drawn heading keeps its last value');
-need((await js('window.host.error')) === '', 'no page error');
+{ const pageErr = await js('window.host.error'); need(pageErr === '', `no page error (${pageErr || 'none'})`); }
 console.log(problems.length ? `protagonist-check: FAIL\n  ${problems.join('\n  ')}` : 'protagonist-check: PASS');
 done(problems.length ? 1 : 0);

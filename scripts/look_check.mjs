@@ -69,6 +69,6 @@ for (let k = 1; k <= 10; k++) { await send('Input.dispatchMouseEvent', { type: '
 await sleep(400);
 need(Math.abs((await yaw()) - y2) <= 1, 'after the button is released, a move does not turn the camera');
 
-need((await js('window.host.error')) === '', 'no page error');
+{ const pageErr = await js('window.host.error'); need(pageErr === '', `no page error (${pageErr || 'none'})`); }
 console.log(problems.length ? `look-check: FAIL\n  ${problems.join('\n  ')}` : 'look-check: PASS');
 done(problems.length ? 1 : 0);

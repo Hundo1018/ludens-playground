@@ -14,7 +14,10 @@ const atPoint = params.has("at") ? params.get("at").split(",").map(Number) : nul
 const stats = (window.host = { frames: 0, error: "", frameMs: 0, app: 0n, rt: null, x: null, assets: 0 });
 
 // The page's converted assets, by file name: the kind playground_host_asset expects (see app/host.mojo).
-const ASSET_KIND = { "CesiumMan.lcharacter": 1, "Fox.lcharacter": 2, "concrete_wall_003.ltexture": 3, "rocks_ground_01.ltexture": 4, "fox_base.ltexture": 5 };
+const ASSET_KIND = { "CesiumMan.lcharacter": 1, "Fox.lcharacter": 2, "concrete_wall_003.ltexture": 3, "rocks_ground_01.ltexture": 4, "fox_base.ltexture": 5,
+  // V1-V3: kind 10 + L is a texture for layer L (frontier/world.mojo LAYER_*)
+  "cesium_base.ltexture": 14, "medieval_blocks_02.ltexture": 15, "castle_brick_07.ltexture": 16, "plastered_wall_02.ltexture": 17,
+  "brown_planks_03.ltexture": 18, "bark_brown_02.ltexture": 19, "hessian_230.ltexture": 20, "rusty_metal_02.ltexture": 21 };
 
 // Each entry of index.json is fetched, checked against its sha256 by the engine's loader, copied into wasm memory,
 // handed to the host, and freed once the call has returned (the host copies the bytes).
@@ -35,6 +38,7 @@ async function loadAssets(rt, x, app) {
     if (rc !== 0) throw new Error("playground_host_asset failed for " + name);
     stats.assets++;
   }
+  stats.assetsDone = true;
 }
 
 // W11: the crowd in a Worker. The page sends the pillar boxes once; each frame it asks the worker for one step and its rows,
@@ -111,6 +115,9 @@ let audioStarted = false;
 async function ensureAudio(rt, x, app) {
   if (audioStarted) return;
   audioStarted = true;
+  // The scene is made here too (idempotent): a key can come before loadSounds, which waits for every texture; the
+  // worklet's first top-up would otherwise find no scene and fail (the mix is silent until the clips arrive).
+  if (x.playground_host_audio_init(app) !== 0) throw new Error("playground_host_audio_init failed");
   const ctx = new AudioContext({ sampleRate: 48000 });
   await ctx.audioWorklet.addModule("./worklet.js");
   const node = new AudioWorkletNode(ctx, "ring-player", { outputChannelCount: [2], processorOptions: { capacity: 8192 } });

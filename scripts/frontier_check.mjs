@@ -136,7 +136,7 @@ need(s2.unloads > 10, `cells left behind were unloaded (${s2.unloads} unloads)`)
 if (shots.quarry && shots.town) { const n = differ(shots.quarry, shots.town); need(n > 5000, `the zones look different (${n} pixels between quarry and town)`); }
 times.sort((a, b) => a - b);
 console.log(`frame time while walking, captures off (median ${times[times.length >> 1].toFixed(2)} ms, max ${times[times.length - 1].toFixed(2)} ms)`);
-need((await js('window.host.error')) === '', 'no page error');
+{ const pageErr = await js('window.host.error'); need(pageErr === '', `no page error (${pageErr || 'none'})`); }
 
 console.log(problems.length ? `frontier-check: FAIL\n  ${problems.join('\n  ')}` : 'frontier-check: PASS');
 done(problems.length ? 1 : 0);
