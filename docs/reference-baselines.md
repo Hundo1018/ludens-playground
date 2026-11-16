@@ -38,3 +38,22 @@ work order.
 
 Each item is one PR with a browser check that runs three times in CI. A check of something stepped in the draw path does not
 use `?offscreen`.
+
+## Results (2026-11-16)
+
+| Ref | PR | Status | Measured | Deviation / engine issue |
+|---|---|---|---|---|
+| A | #82 | met for counts; frame time not comparable to AC Unity | 2,000 members drawn: tiers 40 / 120 / 1,840, palette 3,886 of 4,096 matrices, none dropped. Step-7 bench (12 samples, town off): 0 members 171.5 ms, 2,000 on the main thread 1,441.8 ms, 2,000 in the worker 1,620.0 ms (about 0.64 ms per member, against about 4.5 ms before the tiers). | The engine limits were raised (ludens-engine #70); the shared pose table is the playground's (ludens-engine #71). W11's frame-time item stays NOT MET (`docs/PLAN.md`). |
+| A2 | none | not done | A tier change by distance has no hysteresis and no position check yet. | |
+| B1 | #83, count fixed in #87 | met | A 2,000 kg bob on a 9 m hinge: the standing wall makes 0 events alone, 22 with the bob (native, counted per tick); the page: 15 events, 40 fragments. A 500 kg bob makes 0. | #87: the event count summed a list that grows within a frame; the 3,693 first reported was that bug. |
+| B2 | #84 | met | Rope length 1,015 to 1,029 permille of rest; the end swings 2,251 mm. | |
+| B3 | #84 | met | The banner's free corner moves 3,433 mm; the pinned edge 0 µm. | A cloth cell is drawn as a thin box: there is no dynamic mesh (ludens-engine #73). |
+| B4 | #86 | met | After the guard's contact the figure's pelvis goes from 962 to 993 mm down to 194 to 195 mm within about 0.7 s (three runs). | A six-body figure on `EmbedWorld` ball joints, not `gameplay.ragdoll` (ludens-engine #74). The town now steps with the simulation, not the draw. |
+| C | #88 | met | Latency 4, and latency 4 / jitter 3 / 10 % loss: the server's and both clients' read-back hashes are equal at tick 240; the fragment hash is unchanged over the last 30 ticks; 73 events; 40 of 40 fragments moved on every peer; 45,158 bytes over the break against 2,048 settled. Native and page wasm agree. | The state is quantised fragment poses, not `EmbedWorld.save` (refused with a fracture; ludens-engine #75); rotations go through `teleport` on a scratch world so the read-back matches. Clients display only. |
+| D1 | #85 | met | 62 transitions over 1,200 ticks (native); 25 on the page; a resident next to the player watches. | |
+| D2 | #85 | met | The guard sees a player 12 m ahead and not 12 m behind; on the page it sees the player in the square. | |
+| E1 | #89 | in review | Probes match walks up to 2.5 m/s and the run from 3.0 m/s. On the page the guard is on the run in 122 to 124 samples above 5 m/s and on a walk below 1.5 m/s; the 24 residents stay on walks. | Applied to the town's CesiumMen; the protagonist is the Fox, which has no CMU clips. No idle clip. |
+| E2 | #90 | in review | The slow walk on a 20 degree ramp: worst ankle error 0.13 to 0.14 mm with IK, 91.7 to 93 mm without (native and page). | `foot_plant` and `two_bone` give positions; turning them into joint rotations is the playground's (ludens-engine #76). |
+
+Not met against the games themselves: AC Unity's thousands of NPCs at playable frame rates (A's frame time on SwiftShader is
+over a second at 2,000 members), and A2.
