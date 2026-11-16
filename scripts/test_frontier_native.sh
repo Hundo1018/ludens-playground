@@ -89,6 +89,13 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/mm_parity_native.mojo --target native -o build/mm_parity_native
 build/mm_parity_native
+# audit A5: the town's poses and yaw blend across motion-matching switches and loop wraps (step bounds, unchanged decisions)
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/town_blend_native.mojo --target native -o build/town_blend_native
+build/town_blend_native
 # Reference baseline E2: CesiumMan's feet on a 20 degree slope with two_bone and foot_plant.
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
