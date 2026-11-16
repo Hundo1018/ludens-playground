@@ -15,7 +15,7 @@ from geometry.vec import Real, Vec3
 from nav.heightfield import NavBakeConfig
 from nav.navmesh import NavMesh, bake_navmesh
 from nav.path import FlowField
-from app.nav_boxes import tri, nav_box
+from nav.nav_input import nav_tri, nav_box
 from frontier.world import StaticBox
 
 comptime SPEED = Real(1.4)  # metres per second
@@ -68,8 +68,8 @@ def floor_mesh(boxes: List[StaticBox]) raises -> NavMesh:
     """The 40 m floor with each box as an obstacle (the hub's pillars: plan W5), baked with the arena's settings."""
     var verts = List[Vec3]()
     var tris = List[Int]()
-    tri(verts, tris, Vec3(-20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, -20.0, 0.0))
-    tri(verts, tris, Vec3(20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, 20.0, 0.0))
+    nav_tri(verts, tris, Vec3(-20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, -20.0, 0.0))
+    nav_tri(verts, tris, Vec3(20.0, 0.0, -20.0, 0.0), Vec3(-20.0, 0.0, 20.0, 0.0), Vec3(20.0, 0.0, 20.0, 0.0))
     for bx in boxes:
         nav_box(verts, tris, bx.c, bx.h)
     return bake_navmesh(verts, tris, NavBakeConfig(0.25, 0.1, 1.8, 0.3, 0.4, 45.0, 16))
