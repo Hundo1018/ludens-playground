@@ -38,23 +38,23 @@ def main() raises:
     var at = Vec3(5.0, 0.0, 5.0, 0.0)
     f.knock_down(at, Vec3(1.0, 0.0, 0.0, 0.0))
     var rest = List[Mat4]()
-    for i in range(len(f.rag)):
-        rest.append(pose_mat(f.rag_rest_pos[i], f.rag_rest_rot[i]))
+    for i in range(len(f.rag.bodies)):
+        rest.append(pose_mat(f.rag.rest_pos[i], f.rag.rest_rot[i]))
     var model = _model_mats(c, c.motion[1], 0)  # the slow walk, frame 0
     var place = placement(at, Real(0.0))
     var p0 = joint_positions(model, place, rest, rest)
-    var d_pelvis0 = dist(p0[0], f.rag_rest_pos[0])
-    var d_head0 = dist(p0[4], f.rag_rest_pos[2])
+    var d_pelvis0 = dist(p0[0], f.rag.rest_pos[0])
+    var d_head0 = dist(p0[4], f.rag.rest_pos[2])
     print("standing: pelvis joint to pelvis body", d_pelvis0, "m; neck joint to head body", d_head0, "m")
     for _ in range(120):
         f.world.physics_tick()
     var now = List[Mat4]()
-    for i in range(len(f.rag)):
-        var st = f.world.state(f.rag[i])
+    for i in range(len(f.rag.bodies)):
+        var st = f.world.state(f.rag.bodies[i])
         now.append(pose_mat(st.pos, st.rot))
     var p1 = joint_positions(model, place, rest, now)
-    var d_pelvis1 = dist(p1[0], f.world.state(f.rag[0]).pos)
-    var d_head1 = dist(p1[4], f.world.state(f.rag[2]).pos)
+    var d_pelvis1 = dist(p1[0], f.world.state(f.rag.bodies[0]).pos)
+    var d_head1 = dist(p1[4], f.world.state(f.rag.bodies[2]).pos)
     var lowest = Real(1e9)
     for p in p1:
         lowest = min(lowest, p[1])
