@@ -25,6 +25,8 @@ from motion_match import build_match, m6_hash, _track as motion_track
 from app.town_motion import TownMotion
 from app.foot_ik import foot_ik, Slope
 from app.meshes import unit_sphere_arrays
+from app.rag_skin import rag_palette, pose_mat, placement
+from geometry.mat import Mat4
 from frontier.world import TEXTURE_LAYERS, LAYER_CESIUM, LAYER_PLANKS, LAYER_CONCRETE, tex
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
@@ -142,6 +144,11 @@ struct Host(Movable):
     var knock_pending: Bool  # B4: a contact this frame knocks the guard down (a figure on ball joints in its place)
     var knock_pos: Vec3
     var knock_dir: Vec3
+    var knock_kind: Int  # V5: the guard's clip (Character.motion index), frame and drawn yaw at the tackle
+    var knock_frame: Int
+    var knock_yaw: Real
+    var rag_rest: List[Mat4]  # V5: the figure's bodies when added, and now (read while the world is held, in _draw)
+    var rag_now: List[Mat4]
     var guard_down: Int  # B4: frames left with the skinned guard hidden while its figure lies on the ground
     var tex_job: Optional[TexReadback]
     var b3_job: Optional[B3Job]
@@ -226,6 +233,11 @@ struct Host(Movable):
         self.knock_pos = Vec3(Real(0.0), Real(0.0), Real(0.0), Real(0.0))
         self.knock_dir = Vec3(Real(0.0), Real(0.0), Real(0.0), Real(0.0))
         self.guard_down = 0
+        self.knock_kind = 0
+        self.knock_frame = 0
+        self.knock_yaw = Real(0.0)
+        self.rag_rest = List[Mat4]()
+        self.rag_now = List[Mat4]()
         self.tex_job = None
         self.b3_job = None
         self.palette_dropped = 0
@@ -306,6 +318,11 @@ struct Host(Movable):
         self.knock_pos = move.knock_pos
         self.knock_dir = move.knock_dir
         self.guard_down = move.guard_down
+        self.knock_kind = move.knock_kind
+        self.knock_frame = move.knock_frame
+        self.knock_yaw = move.knock_yaw
+        self.rag_rest = move.rag_rest^
+        self.rag_now = move.rag_now^
         self.tex_job = move.tex_job^
         self.shadow = move.shadow^
         self.shadow_on = move.shadow_on
@@ -366,6 +383,14 @@ struct Host(Movable):
             self._net_markers()
         if self.fracnet:
             self._fracnet_walls()
+        # V5: the knocked-down figure's bodies, for CesiumMan drawn on them in _characters (the Frontier then skips its boxes)
+        self.rag_rest = List[Mat4]()
+        self.rag_now = List[Mat4]()
+        m.world.rag_boxes = not (self.cesium and self.guard_down > 0)
+        for i in range(len(m.world.rag)):
+            self.rag_rest.append(pose_mat(m.world.rag_rest_pos[i], m.world.rag_rest_rot[i]))
+            var st = m.world.world.state(m.world.rag[i])
+            self.rag_now.append(pose_mat(st.pos, st.rot))
         var cview = View(m.camera(), Real(Float64(self.width) / Float64(self.height)))  # the crowd's visible set (W11 LOD)
         self._characters(m.world.player_pos(), m.world.player_vel(), cview)  # read while the world is held here, not inside _characters
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
@@ -603,6 +628,7 @@ struct Host(Movable):
         var town_bases = List[Int]()
         var town_guard = -1  # W6: the guard's row, drawn in a distinct colour
         var town_yaw = List[Float64]()  # E1: each character turned to face its velocity
+        var rag_items = List[Int]()  # V5: the palette base of the knocked-down guard, when it is drawn
         if self.town:
             var tn = self.town.take()
             town_guard = tn.guard
@@ -621,6 +647,14 @@ struct Host(Movable):
                     town_yaw.append(0.0)
                 town_rows.append(tn.crowd.pos[k])
             self.town = tn^
+        # V5: the knocked-down guard: CesiumMan on the figure's six bodies, in world space (the item sits at the origin)
+        if self.guard_down > 0 and len(self.rag_now) == 6 and len(pal) // 16 + c.joint_count <= PALETTE_MATRICES:
+            var rag_base = len(pal) // 16
+            var kk = self.knock_kind if self.knock_kind < len(c.motion) else 0
+            ref clip = c.motion[kk]
+            var nfr = len(clip) // (10 * c.joint_count)
+            pal.extend(rag_palette(c, clip, min(self.knock_frame, nfr - 1), placement(self.knock_pos, self.knock_yaw), self.rag_rest, self.rag_now))
+            rag_items.append(rag_base)
         # E2: two CesiumMen on 20 degree ramps in the hub, walking in place uphill along +x: foot IK on (x 4), off (x 9)
         var ik_bases = List[Int]()
         var ik_yaw = Float64(0)
@@ -694,7 +728,7 @@ struct Host(Movable):
 
         for k in range(len(town_rows)):
             if k == town_guard and self.guard_down > 0:
-                continue  # B4: the guard's figure lies on the ground (the Frontier draws it)
+                continue  # B4: the guard lies on the ground (V5: drawn below on the figure's bodies)
             var tp = town_rows[k]
             var pos = Vec3(tp[0], Real(0.0), tp[2], Real(0.0))
             var hy = town_yaw[k] * 0.5
@@ -703,6 +737,12 @@ struct Host(Movable):
                 Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
                 Vec3(Real(1.0), Real(0.45), Real(0.4), Real(0.0)) if k == town_guard else Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
                 self.skin_cesium, town_bases[k], cesium_mat, LAYER_CESIUM,
+            ))
+        for base in rag_items:
+            self.renderer.value().push(DrawItem(
+                -1, Vec3(Real(0.0), Real(0.0), Real(0.0), Real(0.0)), 0.0, 0.0, 0.0, 1.0,
+                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), Vec3(Real(1.0), Real(0.45), Real(0.4), Real(0.0)),
+                self.skin_cesium, base, cesium_mat, LAYER_CESIUM,
             ))
         # E2: the ramps (each a thin box turned about +z so its top rises 20 degrees along +x through the walker's feet)
         # and the two walkers, the IK one tinted green, the plain one grey
@@ -761,12 +801,14 @@ struct Host(Movable):
         W6: a guard contact sends the player back to the hub on the next frame. B4: it also knocks the guard down."""
         if self.guard_down > 0:
             self.guard_down -= 1
+            if self.guard_down == 0:
+                m.world.clear_rag()  # V5: the guard stands up; its figure leaves
         if self.reset_player:
             self.reset_player = False
             m.world.teleport(0.0, 0.0)
         if self.knock_pending:
             self.knock_pending = False
-            m.world.knock_down(self.knock_pos, self.knock_dir)
+            m.world.knock_down(self.knock_pos, self.knock_dir, self.knock_yaw)
         if not self.town:
             return
         var player = m.world.player_pos()
@@ -788,7 +830,12 @@ struct Host(Movable):
             self.knock_pending = True
             self.knock_pos = gp
             self.knock_dir = Vec3(dx / dl, Real(0.0), dz / dl, Real(0.0)) if dl > Real(1e-6) else Vec3(Real(1.0), Real(0.0), Real(0.0), Real(0.0))
-            self.guard_down = 180
+            self.guard_down = 300
+            if self.town_motion:  # V5: the pose the skinned figure starts from
+                ref tm = self.town_motion.value()
+                self.knock_kind = tm.kind(tn.guard)
+                self.knock_frame = tm.frame_index(tn.guard)
+                self.knock_yaw = tm.yaw(tn.guard)
         self.town = tn^
 
     def _audio_goals(mut self) raises:
