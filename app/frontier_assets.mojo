@@ -202,7 +202,15 @@ def pose_palette_frame(c: Character, frame: Int) raises -> List[Float32]:
     removed (in place), then the inverse bind and the root transform (the ancestors the bind matrices exclude)."""
     if frame < 0 or frame >= c.frames:
         raise Error("pose_palette_frame: frame " + String(frame) + " is outside the clip (" + String(c.frames) + " frames)")
-    var locals = locals_at(c.clip, frame, c.joint_count)
+    return pose_palette_clip(c, c.clip, frame)
+
+
+def pose_palette_clip(c: Character, clip: List[Float32], frame: Int) raises -> List[Float32]:
+    """pose_palette_frame for another clip of the same skeleton (10 values per joint per frame), e.g. one of c.motion."""
+    var frames = len(clip) // (10 * c.joint_count)
+    if frame < 0 or frame >= frames:
+        raise Error("pose_palette_clip: frame " + String(frame) + " is outside the clip (" + String(frames) + " frames)")
+    var locals = locals_at(clip, frame, c.joint_count)
     var ibm = palette_to_mats(c.ibm)
     var root = palette_to_mats(c.root)[0].copy()
     strip_root_xz(locals, root)

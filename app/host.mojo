@@ -20,8 +20,9 @@ from app.net_fracture import FractureNetResult, run_fracture_session
 from app.skin_pass import build_palette_root, cpu_skin, palette_to_mats
 from app.skin_gpu import GpuSkinning, SkinJob
 from app.skin_pass import CpuSkinning, Skinning
-from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame
+from frontier_assets import Character, parse_character, parse_ltexture, pose_palette, rest_palette, locals_at, pose_palette_frame, pose_palette_clip
 from motion_match import build_match, m6_hash
+from app.town_motion import TownMotion
 from net_frontier import run_session, script, NP, FrontierSim
 from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow, positions_hash
@@ -121,6 +122,7 @@ struct Host(Movable):
     var crowd_ext: Bool  # W11: the crowd's rows come from the worker (playground_host_crowd_feed); the page does not step it
     var ext_rows: List[CrowdRow]  # W11: the worker's rows for this frame
     var town: Optional[Town]  # the town's residents (ORCA, corner routes) and a guard; None until asked for
+    var town_motion: Optional[TownMotion]  # E1: the town's characters' clips by motion matching on their velocity
     var contacts: Int  # W6: the guard touched the player (the player is sent back to the hub)
     var reset_player: Bool  # W6: set by a contact this frame, acted on after the draw
     var knock_pending: Bool  # B4: a contact this frame knocks the guard down (a figure on ball joints in its place)
@@ -187,6 +189,7 @@ struct Host(Movable):
         self.wall_mesh = -1
         self.crowd = None
         self.town = None
+        self.town_motion = None
         self.crowd_ext = False
         self.ext_rows = List[CrowdRow]()
         self.contacts = 0
@@ -257,6 +260,7 @@ struct Host(Movable):
         self.crowd_ext = move.crowd_ext
         self.ext_rows = move.ext_rows.copy()
         self.town = move.town^
+        self.town_motion = move.town_motion^
         self.contacts = move.contacts
         self.reset_player = move.reset_player
         self.knock_pending = move.knock_pending
@@ -509,6 +513,7 @@ struct Host(Movable):
         var town_rows = List[Vec3]()
         var town_bases = List[Int]()
         var town_guard = -1  # W6: the guard's row, drawn in a distinct colour
+        var town_yaw = List[Float64]()  # E1: each character turned to face its velocity
         if self.town:
             var tn = self.town.take()
             town_guard = tn.guard
@@ -516,9 +521,15 @@ struct Host(Movable):
                 if len(pal) // 16 + c.joint_count > PALETTE_MATRICES:
                     self.palette_dropped += len(tn.crowd.pos) - k
                     break
-                var fr = (Int(self.clock * Float64(c.fps)) + 7 * k) % c.frames
                 town_bases.append(len(pal) // 16)
-                pal.extend(pose_palette_frame(c, fr))
+                if self.town_motion:
+                    ref tm = self.town_motion.value()
+                    pal.extend(pose_palette_clip(c, c.motion[tm.kind(k)], tm.frame_index(k)))
+                    town_yaw.append(Float64(tm.yaw(k)))
+                else:
+                    var fr = (Int(self.clock * Float64(c.fps)) + 7 * k) % c.frames
+                    pal.extend(pose_palette_frame(c, fr))
+                    town_yaw.append(0.0)
                 town_rows.append(tn.crowd.pos[k])
             self.town = tn^
         self.palette_used = len(pal) // 16
@@ -569,8 +580,9 @@ struct Host(Movable):
                 continue  # B4: the guard's figure lies on the ground (the Frontier draws it)
             var tp = town_rows[k]
             var pos = Vec3(tp[0], Real(0.0), tp[2], Real(0.0))
+            var hy = town_yaw[k] * 0.5
             self.renderer.value().push(DrawItem(
-                -1, pos, 0.0, 0.0, 0.0, 1.0,
+                -1, pos, 0.0, sin(hy), 0.0, cos(hy),
                 Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
                 Vec3(Real(0.85), Real(0.12), Real(0.1), Real(0.0)) if k == town_guard else Vec3(Real(0.9), Real(0.6), Real(0.4), Real(0.0)),
                 self.skin_cesium, town_bases[k], 0,
@@ -626,6 +638,11 @@ struct Host(Movable):
         var player = m.world.player_pos()
         var tn = self.town.take()
         tn.step(Real(1.0 / 60.0), player)
+        # E1: each character's clip and frame by motion matching on its velocity (built once CesiumMan is on the page)
+        if not self.town_motion and self.cesium and len(self.cesium.value().motion) > 0:
+            self.town_motion = TownMotion(self.cesium.value(), len(tn.crowd.pos))
+        if self.town_motion:
+            self.town_motion.value().step(Real(1.0 / 60.0), tn.crowd.vel)
         if tn.guard_distance(player) < CONTACT_R:
             self.contacts += 1
             self.reset_player = True
@@ -1514,6 +1531,34 @@ def playground_host_town_ai(app: UInt64, which: Int32) abi("C") -> Int32:
         return Int32(h[].town.value().watching())
     if which == 2:
         return 1 if h[].town.value().guard_sees else 0
+    return -1
+
+
+@export
+def playground_host_town_motion(app: UInt64, which: Int32) abi("C") -> Int32:
+    """E1: the town's motion matching. 0 the guard's clip kind (101..107), 1 residents on a walk, 2 residents on the run,
+    3 clip switches so far, 4 the guard's speed in mm/s. -1 before the matching is built."""
+    ref h = _host(app)[]
+    if not h.town_motion or not h.town:
+        return -1
+    ref tm = h.town_motion.value()
+    ref tn = h.town.value()
+    if which == 0:
+        return Int32(101 + tm.kind(tn.guard))
+    if which == 1 or which == 2:
+        var n = 0
+        for a in range(len(tm.clip)):
+            if a == tn.guard:
+                continue
+            var run = tm.kind(a) == 6
+            if (which == 2) == run:
+                n += 1
+        return Int32(n)
+    if which == 3:
+        return Int32(tm.switches)
+    if which == 4:
+        var v = tn.crowd.vel[tn.guard]
+        return Int32(Int(((v[0] * v[0] + v[1] * v[1]) ** 0.5) * 1000.0))
     return -1
 
 
