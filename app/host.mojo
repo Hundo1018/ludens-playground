@@ -11,7 +11,6 @@ from geometry.vec import Real
 from scene import Scene
 from hud import Hud
 from render3d import ArenaRenderer
-from app.mesh_pass import MeshRegistry, unit_cube_arrays
 from app.shadow_pass import ShadowPass
 from app.ao_grid import ao_grid, AO_N, AO_X0, AO_SIZE
 from std.math import sqrt
@@ -24,7 +23,6 @@ from frontier_assets import Character, parse_character, parse_ltexture, pose_pal
 from motion_match import build_match, m6_hash, _track as motion_track
 from app.town_motion import TownMotion
 from app.foot_ik import foot_ik, Slope
-from app.meshes import unit_sphere_arrays
 from app.rag_skin import rag_palette, pose_mat, placement
 from geometry.mat import Mat4
 from frontier.world import TEXTURE_LAYERS, LAYER_CESIUM, LAYER_PLANKS, LAYER_CONCRETE, tex
@@ -122,7 +120,6 @@ struct Host(Movable):
     var placed: Bool  # the meshes and the wall texture are registered with the renderer
     var skin_cesium: Int
     var skin_fox: Int
-    var wall_mesh: Int  # the unit cube on the mesh pass, for the taller scenery (walls, boxes); -1 until registered
     var crowd: Optional[CrowdState]  # the crowd of step 7 (ecs entities, flow field), None until asked for
     var crowd_ext: Bool  # W11: the crowd's rows come from the worker (playground_host_crowd_feed); the page does not step it
     var ext_rows: List[CrowdRow]  # W11: the worker's rows for this frame
@@ -132,8 +129,6 @@ struct Host(Movable):
     var ik_raw_um: Int  # E2: the same without IK
     var ik_frames: Int
     var layer_tex: List[List[List[UInt8]]]  # V1-V3: textures for layers 4 and up, as the page sends them (empty until then)
-    var layer_loaded: List[Bool]  # per layer: uploaded to the renderer
-    var sphere_mesh: Int  # V2: the unit sphere a textured sphere is drawn with
     var atmo_on: Bool  # V4: sky, fog and the linear workflow with tone mapping (the engine's set_atmosphere); ?noatmo turns it off
     var skymark: Bool  # V4: the sky drawn magenta with fog off, for the visual check's sky mask
     var flatmark: Bool  # V0: every colour-only item (material 0) drawn magenta, so a capture can count them
@@ -207,7 +202,6 @@ struct Host(Movable):
         self.placed = False
         self.skin_cesium = -1
         self.skin_fox = -1
-        self.wall_mesh = -1
         self.crowd = None
         self.town = None
         self.town_motion = None
@@ -218,11 +212,8 @@ struct Host(Movable):
         self.skymark = False
         self.atmo_on = True
         self.layer_tex = List[List[List[UInt8]]]()
-        self.layer_loaded = List[Bool]()
         for _ in range(TEXTURE_LAYERS):
             self.layer_tex.append(List[List[UInt8]]())
-            self.layer_loaded.append(False)
-        self.sphere_mesh = -1
         self.wall_layers = 0
         self.ik_yaws = List[Real]()
         self.crowd_ext = False
@@ -295,7 +286,6 @@ struct Host(Movable):
         self.placed = move.placed
         self.skin_cesium = move.skin_cesium
         self.skin_fox = move.skin_fox
-        self.wall_mesh = move.wall_mesh
         self.crowd = move.crowd^
         self.crowd_ext = move.crowd_ext
         self.ext_rows = move.ext_rows.copy()
@@ -308,8 +298,6 @@ struct Host(Movable):
         self.skymark = move.skymark
         self.atmo_on = move.atmo_on
         self.layer_tex = move.layer_tex^
-        self.layer_loaded = move.layer_loaded^
-        self.sphere_mesh = move.sphere_mesh
         self.wall_layers = move.wall_layers
         self.ik_yaws = move.ik_yaws^
         self.contacts = move.contacts
@@ -359,26 +347,27 @@ struct Host(Movable):
         # 380 m across the camera (inside the 400 m far plane) with the engine's sky material
         self.renderer.value().mesh.set_atmosphere(self.boot.device(), Vec3(Real(SKY_TOP_R), Real(SKY_TOP_G), Real(SKY_TOP_B), Real(0.0)),
             Vec3(Real(SKY_HOR_R), Real(SKY_HOR_G), Real(SKY_HOR_B), Real(0.0)), Float32(FOG_DENSITY), Float32(EXPOSURE), self.atmo_on and not self.skymark, self.atmo_on and not self.skymark, Float32(SKY_CURVE))
-        if (self.atmo_on or self.skymark) and self.sphere_mesh >= 0:
+        if self.atmo_on or self.skymark:
             var eye = m.camera().position
             # skymark (the visual check): the sky drawn as a colour-only magenta sphere and no fog, so a capture can tell sky
             # pixels from far ground by colour
             var sky = DrawItem(1, eye, 0.0, 0.0, 0.0, 1.0, Vec3(Real(SKY_RADIUS), Real(SKY_RADIUS), Real(SKY_RADIUS), Real(0.0)),
                                Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)), -1, -1, 3, 0)
-            if self.skymark:
+            if self.skymark:  # the engine's unit sphere, colour-only
                 sky.color = Vec3(Real(1.0), Real(0.0), Real(1.0), Real(0.0))
-                sky.material = 1  # meshified with a material, then set to colour-only below
-            var mesh_sky = self._meshify(sky^)
-            if self.skymark:
-                mesh_sky.material = 0
-            self.renderer.value().push(mesh_sky^)
-        # the mesh items that cast shadows: static meshes only (the skinned characters are not in the shadow pass yet)
-        var shadow_items = List[DrawItem]()
+                sky.material = 0
+                sky.mesh_id = self.renderer.value().sphere
+                sky.half = sky.half * Real(2.0)
+            self.renderer.value().push(sky^)
+        # the scene's mesh items cast shadows: push turns every textured primitive into one (ludens-engine#78), so they are
+        # the items it added for the scene that have a mesh
+        var first = len(self.renderer.value().items)
         for it in m.scene():
-            var item = self._meshify(it.copy())  # every scene item carries its texture layer (frontier/world.mojo)
-            if item.mesh_id >= 0:
-                shadow_items.append(item.copy())
-            self.renderer.value().push(item)
+            self.renderer.value().push(it.copy())  # every scene item carries its texture layer (frontier/world.mojo)
+        var shadow_items = List[DrawItem]()
+        for k in range(first, len(self.renderer.value().items)):
+            if self.renderer.value().items[k].mesh_id >= 0:
+                shadow_items.append(self.renderer.value().items[k].copy())
         if self.net_on and self.net_run:
             self._net_markers()
         if self.fracnet:
@@ -468,23 +457,7 @@ struct Host(Movable):
                 k += 7
                 var half = Vec3(Real(0.6), Real(0.6), Real(0.6), Real(0.0)) if crate else Vec3(Real(0.3), Real(0.3), Real(0.15), Real(0.0))
                 var c = Vec3(Real(1.0), Real(0.95), Real(0.9), Real(0.0)) if crate else col
-                self.renderer.value().push(self._meshify(tex(DrawItem(0, pos, qx, qy, qz, qw, half, c), LAYER_PLANKS if crate else LAYER_CONCRETE)))
-
-    def _meshify(self, var item: DrawItem) -> DrawItem:
-        """A textured primitive (material > 0, no mesh) becomes a mesh item: a box on the unit cube, a sphere on the unit
-        sphere (both 1 across, so the half extents double). A layer not uploaded yet samples white (layer 0) meanwhile."""
-        if item.material == 0 or item.mesh_id >= 0 or item.pose_id >= 0:
-            return item^
-        var m = self.wall_mesh if item.kind == 0 else self.sphere_mesh
-        if m < 0:
-            return item^
-        if item.kind == 1:
-            item.half = Vec3(item.half[0], item.half[0], item.half[0], Real(0.0))
-        item.mesh_id = m
-        item.half = item.half * Real(2.0)
-        if item.layer >= 0 and item.layer < len(self.layer_loaded) and not self.layer_loaded[item.layer]:
-            item.layer = 0
-        return item^
+                self.renderer.value().push(tex(DrawItem(0, pos, qx, qy, qz, qw, half, c), LAYER_PLANKS if crate else LAYER_CONCRETE))
 
     def _register(mut self) raises:
         """Once both characters and the wall are on the page: their meshes and the texture layer go to the renderer.
@@ -495,16 +468,10 @@ struct Host(Movable):
         if self.fox_tex and not self.fox_tex_loaded and self.renderer and not self.no_tex:
             self.renderer.value().textures.load_layer(self.boot.device(), UInt32(3), self.fox_tex.value().copy())
             self.fox_tex_loaded = True
-        self.layer_loaded[0] = True
-        if self.ground_loaded:
-            self.layer_loaded[2] = True
-        if self.fox_tex_loaded:
-            self.layer_loaded[3] = True
         if self.renderer and not self.no_tex:
             for L in range(4, TEXTURE_LAYERS):
-                if not self.layer_loaded[L] and len(self.layer_tex[L]) > 0:
+                if not self.renderer.value().textures.is_loaded(L) and len(self.layer_tex[L]) > 0:
                     self.renderer.value().textures.load_layer(self.boot.device(), UInt32(L), self.layer_tex[L].copy())
-                    self.layer_loaded[L] = True
         if self.placed or not self.cesium or not self.fox or not self.wall:
             return
         var c = self.cesium.value().copy()
@@ -512,11 +479,6 @@ struct Host(Movable):
         var f = self.fox.value().copy()
         self.skin_fox = self.renderer.value().meshes.add_skinned(f.positions.copy(), f.normals.copy(), f.uv.copy(), f.joints.copy(), f.weights.copy(), f.indices.copy())
         self.renderer.value().textures.load_layer(self.boot.device(), UInt32(1), self.wall.value().copy())
-        self.layer_loaded[1] = True
-        var cube = unit_cube_arrays()
-        self.wall_mesh = self.renderer.value().meshes.add_static(cube[0].copy(), cube[1].copy(), cube[2].copy(), cube[3].copy())
-        var sph = unit_sphere_arrays()
-        self.sphere_mesh = self.renderer.value().meshes.add_static(sph[0].copy(), sph[1].copy(), sph[2].copy(), sph[3].copy())
         self.placed = True
 
     def _characters(mut self, player: Vec3, vel: Vec3, view: View) raises:
@@ -526,7 +488,7 @@ struct Host(Movable):
             return
         var c = self.cesium.value().copy()
         var f = self.fox.value().copy()
-        var cesium_mat = 1 if self.layer_loaded[LAYER_CESIUM] else 0  # V1: CesiumMan's own texture once it is uploaded
+        var cesium_mat = 1  # V1: CesiumMan's own texture (white until it is uploaded: the engine's layer fallback)
         var pal = pose_palette(c, self.clock)
         var fox_base = c.joint_count
         # the circling Fox walks at 1.5 m/s, so it keeps the Walk clip (plan W3: the four-second cycle is gone)
@@ -750,10 +712,10 @@ struct Host(Movable):
         for side in range(len(ik_bases)):
             var base = Vec3(Real(IK_RAMP_X0 if side == 0 else IK_RAMP_X1), Real(IK_RAMP_Y), Real(IK_RAMP_Z), Real(0.0))
             var normal = Vec3(Real(-sin(th)), Real(cos(th)), Real(0.0), Real(0.0))
-            self.renderer.value().push(self._meshify(tex(DrawItem(
+            self.renderer.value().push(tex(DrawItem(
                 0, base - normal * Real(0.05), 0.0, 0.0, sin(th * 0.5), cos(th * 0.5),
                 Vec3(Real(1.6), Real(0.05), Real(0.8), Real(0.0)), Vec3(Real(1.0), Real(1.0), Real(1.0), Real(0.0)),
-            ), LAYER_PLANKS)))
+            ), LAYER_PLANKS))
             var hy = ik_yaw * 0.5
             self.renderer.value().push(DrawItem(
                 -1, base, 0.0, sin(hy), 0.0, cos(hy),
