@@ -127,6 +127,8 @@ struct Host(Movable):
     var ik_worst_um: Int  # E2: the worst foot error on the hub's ramp with foot IK, micrometres, since the start
     var ik_raw_um: Int  # E2: the same without IK
     var ik_frames: Int
+    var flatmark: Bool  # V0: every colour-only item (material 0) drawn magenta, so a capture can count them
+    var wall_layers: Int  # V0: distinct texture layers on the building faces in the last frame
     var ik_yaws: List[Real]  # E2: the slow walk's facing yaw per frame (motion_match's track), filled once
     var contacts: Int  # W6: the guard touched the player (the player is sent back to the hub)
     var reset_player: Bool  # W6: set by a contact this frame, acted on after the draw
@@ -198,6 +200,8 @@ struct Host(Movable):
         self.ik_worst_um = 0
         self.ik_raw_um = 0
         self.ik_frames = 0
+        self.flatmark = False
+        self.wall_layers = 0
         self.ik_yaws = List[Real]()
         self.crowd_ext = False
         self.ext_rows = List[CrowdRow]()
@@ -273,6 +277,8 @@ struct Host(Movable):
         self.ik_worst_um = move.ik_worst_um
         self.ik_raw_um = move.ik_raw_um
         self.ik_frames = move.ik_frames
+        self.flatmark = move.flatmark
+        self.wall_layers = move.wall_layers
         self.ik_yaws = move.ik_yaws^
         self.contacts = move.contacts
         self.reset_player = move.reset_player
@@ -351,6 +357,16 @@ struct Host(Movable):
                     shadow_items.append(it.copy())
             var pal = self.renderer.value().skin_palette.copy()
             self.shadow.value().draw(self.boot.device(), shadow_items, self.renderer.value().meshes, light, sview^, pal)
+        # V0: the building faces' texture layers (scenery taller than the 0.05 m ground tiles), counted for the visual check
+        var seen = List[Int]()
+        for it in self.renderer.value().items:
+            if it.pose_id < 0 and it.material > 0 and it.half[1] > Real(0.2) and it.layer not in seen:
+                seen.append(it.layer)
+        self.wall_layers = len(seen)
+        if self.flatmark:
+            for i in range(len(self.renderer.value().items)):
+                if self.renderer.value().items[i].material == 0:
+                    self.renderer.value().items[i].color = Vec3(Real(1.0), Real(0.0), Real(1.0), Real(0.0))
         self.renderer.value().draw(self.boot.device(), target, self.width, self.height, self.hud.value())
         self.world = m^
 
@@ -1640,6 +1656,18 @@ def playground_host_foot_ik(app: UInt64, which: Int32) abi("C") -> Int32:
     if which == 2:
         return Int32(h.ik_frames)
     return -1
+
+
+@export
+def playground_host_flatmark(app: UInt64, on: Int32) abi("C"):
+    """V0: draw every colour-only item (material 0, no texture) in magenta, for the visual check's flat-colour count."""
+    _host(app)[].flatmark = on != 0
+
+
+@export
+def playground_host_wall_layers(app: UInt64) abi("C") -> Int32:
+    """V0: how many distinct texture layers the building faces used in the last drawn frame."""
+    return Int32(_host(app)[].wall_layers)
 
 
 @export

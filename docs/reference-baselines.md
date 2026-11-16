@@ -57,3 +57,22 @@ use `?offscreen`.
 
 Not met against the games themselves: AC Unity's thousands of NPCs at playable frame rates (A's frame time on SwiftShader is
 over a second at 2,000 members), and A2.
+
+## V: visual quality (2026-11-16)
+
+The three games are judged first by how they look: AC Unity's material density (stone, cloth, costumes), RDR2's light and
+atmosphere, Battlefield 1's debris. The checks above measure behaviour only. These measure the picture, with
+`scripts/visual_check.py` on four fixed views (hub, town street, quarry, camp; `?offscreen`), each captured twice in one
+session: the normal frame and the same frame with `playground_host_flatmark` (every colour-only item drawn magenta).
+Each bound was chosen so that the page before this work fails it.
+
+| Metric | What it catches | Bound | Before (main, 2026-11-16) |
+|---|---|---|---|
+| `flat` | share of scene pixels drawn without a texture (material 0) | at most 0.2 % in every view | hub 1.46 %, town 0.68 %, quarry 0 %, camp 1.26 % |
+| `floating_cols` | columns with sky under an object in the upper half (the border walls hung over unloaded ground) | at most 2 % | hub 82 %, town 5.5 %, quarry 68 %, camp 82 % |
+| `sky_grad` | luminance from the top of the sky to its lowest all-sky row (hub) | at least 8 | 0 (one clear colour) |
+| `fog` | far ground's colour distance to the horizon sky over the near ground's (hub) | at most 0.7 | 0.99 |
+| `wall_layers` | distinct texture layers on building faces (town, read at the source) | at least 3 | 1 |
+
+The metrics stand in for parts of what makes a picture look right; they do not replace looking at it, so every V PR
+also carries before and after captures of the same views.
