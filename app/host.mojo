@@ -389,9 +389,9 @@ struct Host(Movable):
         self.rag_rest = List[Mat4]()
         self.rag_now = List[Mat4]()
         m.world.rag_boxes = not (self.cesium and self.guard_down > 0)
-        for i in range(len(m.world.rag)):
-            self.rag_rest.append(pose_mat(m.world.rag_rest_pos[i], m.world.rag_rest_rot[i]))
-            var st = m.world.world.state(m.world.rag[i])
+        for i in range(len(m.world.rag.bodies)):
+            self.rag_rest.append(pose_mat(m.world.rag.rest_pos[i], m.world.rag.rest_rot[i]))
+            var st = m.world.world.state(m.world.rag.bodies[i])
             self.rag_now.append(pose_mat(st.pos, st.rot))
         var cview = View(m.camera(), Real(Float64(self.width) / Float64(self.height)))  # the crowd's visible set (W11 LOD)
         self._characters(m.world.player_pos(), m.world.player_vel(), cview)  # read while the world is held here, not inside _characters
