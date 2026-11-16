@@ -28,6 +28,9 @@ from geometry.vec import Real, Vec3
 from physics.rigid6 import QuatBody6, Inertia3
 from physics.solver6 import ContactScene6
 from physics.cloth import MeshCloth, grid_mesh
+from physics.rope import Rope
+from procedural.ik_pose import shortest_arc
+from embed.world import unpack_body
 from procedural.camera_math import CameraPose, Frustum
 from std.math import sqrt
 
@@ -84,10 +87,10 @@ comptime PENDULUM_BOB_R = Real(1.0)
 comptime CAMP_CENTER = Vec3(-110.0, 0.0, -112.0, 0.0)  # B2, B3: the camp's rope and banner are built when the player comes near
 comptime CAMP_BUILD_R = Real(25.0)
 comptime ROPE_TOP = Vec3(-104.0, 8.0, -112.0, 0.0)  # B2: the rope hangs from a beam here
-comptime ROPE_SEGS = 12  # capsule segments, joined end to end by ball joints
+comptime ROPE_SEGS = 12  # segments of ludens-core's XPBD rope (physics.rope.Rope)
 comptime ROPE_R = Real(0.06)
-comptime ROPE_HALF = Real(0.2)  # half the cylinder part of a segment
-comptime ROPE_END = Real(0.26)  # centre to joint: ROPE_HALF + ROPE_R
+comptime ROPE_SEG_LEN = Real(0.52)  # rest length of one segment (6.24 m in all)
+comptime ROPE_MASS = Real(4.8)
 comptime ROPE_WEIGHT_R = Real(0.25)  # a 5 kg ball at the end, pushed sideways so the rope swings
 comptime FLAG_POLE = Vec3(-114.0, 3.2, -112.0, 0.0)  # B3: the banner's pinned edge starts here and runs 1.2 m along z
 comptime FLAG_NX = 12
@@ -274,7 +277,8 @@ struct Frontier(Movable):
     var pendulum_anchor: Int64  # B1: the hinge's static anchor, -1 until the wall is added
     var pendulum_bob: Int64  # B1: the 2000 kg bob on the hinge, -1 until the wall is added
     var camp_built: Bool  # B2, B3: the rope and the banner exist
-    var rope: List[Int64]  # B2: the rope's segments, then its end ball
+    var rope: Optional[Rope]  # B2: the rope, stepped on the world's scene after each physics tick
+    var rope_ball: Int64  # B2: the 5 kg ball at its end
     var rope_beam: Int64
     var flag: Optional[MeshCloth]  # B3: the banner, a cloth stepped in its own contact scene
     var flag_scene: ContactScene6[QuatBody6]
@@ -313,7 +317,8 @@ struct Frontier(Movable):
         self.pendulum_anchor = -1
         self.pendulum_bob = -1
         self.camp_built = False
-        self.rope = List[Int64]()
+        self.rope = None
+        self.rope_ball = -1
         self.rope_beam = -1
         self.flag = None
         self.flag_scene = ContactScene6[QuatBody6]()
@@ -359,6 +364,7 @@ struct Frontier(Movable):
         self.pendulum_bob = move.pendulum_bob
         self.camp_built = move.camp_built
         self.rope = move.rope^
+        self.rope_ball = move.rope_ball
         self.rope_beam = move.rope_beam
         self.flag = move.flag^
         self.flag_scene = move.flag_scene^
@@ -526,17 +532,13 @@ struct Frontier(Movable):
         if which == STAT_BOB_Z_MM:
             return Int(self.world.state(self.pendulum_bob).pos[2] * Real(1000.0)) if self.pendulum_bob >= 0 else -1
         if which == STAT_ROPE_LEN_PERMILLE:
-            if len(self.rope) < ROPE_SEGS:
+            if not self.rope:
                 return -1
-            var total = Real(0.0)
-            for k in range(ROPE_SEGS - 1):
-                var d = self.world.state(self.rope[k + 1]).pos - self.world.state(self.rope[k]).pos
-                total += sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
-            return Int(total / (ROPE_END * Real(2 * (ROPE_SEGS - 1))) * Real(1000.0))
+            return Int(self.rope.value().length() / (ROPE_SEG_LEN * Real(ROPE_SEGS)) * Real(1000.0))
         if which == STAT_ROPE_SWING_MM:
-            if len(self.rope) == 0:
+            if self.rope_ball < 0:
                 return -1
-            var e = self.world.state(self.rope[len(self.rope) - 1]).pos
+            var e = self.world.state(self.rope_ball).pos
             var dx = e[0] - ROPE_TOP[0]
             var dz = e[2] - ROPE_TOP[2]
             return Int(sqrt(dx * dx + dz * dz) * Real(1000.0))
@@ -643,17 +645,21 @@ struct Frontier(Movable):
             var mid = (bs.pos + PENDULUM_PIVOT) * Real(0.5)
             out.append(tex(DrawItem(0, mid, Float64(bs.rot.x), Float64(bs.rot.y), Float64(bs.rot.z), Float64(bs.rot.w),
                                 Vec3(0.1, 0.1, PENDULUM_LEN * Real(0.5), 0.0), Vec3(1.0, 1.0, 1.0, 0.0)), LAYER_PLANKS))
-        # B2: the rope's beam, its segments (boxes along each capsule's axis) and its end ball
+        # B2: the rope's beam, a box along each rope segment, and the end ball
         if self.camp_built:
             out.append(tex(DrawItem(0, ROPE_TOP, 0.0, 0.0, 0.0, 1.0, Vec3(0.6, 0.1, 0.1, 0.0), Vec3(1.0, 1.0, 1.0, 0.0)), LAYER_PLANKS))
-            for k in range(len(self.rope)):
-                var rs = self.world.state(self.rope[k])
-                if k < ROPE_SEGS:
-                    out.append(tex(DrawItem(0, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
-                                        Vec3(ROPE_R, ROPE_END, ROPE_R, 0.0), Vec3(1.0, 0.95, 0.85, 0.0)), LAYER_HESSIAN))
-                else:
-                    out.append(tex(DrawItem(1, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
-                                        Vec3(ROPE_WEIGHT_R, ROPE_WEIGHT_R, ROPE_WEIGHT_R, 0.0), Vec3(0.7, 0.7, 0.72, 0.0)), LAYER_METAL))
+            if self.rope:
+                var xs = self.rope.value().x.copy()
+                for k in range(len(xs) - 1):
+                    var d = xs[k + 1] - xs[k]
+                    var q = shortest_arc(Vec3(0.0, 1.0, 0.0, 0.0), d)
+                    var half = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) * Real(0.5)
+                    out.append(tex(DrawItem(0, (xs[k] + xs[k + 1]) * Real(0.5), Float64(q.x), Float64(q.y), Float64(q.z), Float64(q.w),
+                                        Vec3(ROPE_R, half, ROPE_R, 0.0), Vec3(1.0, 0.95, 0.85, 0.0)), LAYER_HESSIAN))
+            if self.rope_ball >= 0:
+                var rs = self.world.state(self.rope_ball)
+                out.append(tex(DrawItem(1, rs.pos, Float64(rs.rot.x), Float64(rs.rot.y), Float64(rs.rot.z), Float64(rs.rot.w),
+                                    Vec3(ROPE_WEIGHT_R, ROPE_WEIGHT_R, ROPE_WEIGHT_R, 0.0), Vec3(0.7, 0.7, 0.72, 0.0)), LAYER_METAL))
         # B3: the banner's pole and its cells, each a thin box in the cell's own frame
         if self.flag:
             out.append(tex(DrawItem(0, FLAG_POLE + Vec3(0.0, 0.0, FLAG_H * Real(0.5), 0.0), 0.0, 0.0, 0.0, 1.0,
@@ -734,25 +740,21 @@ struct Frontier(Movable):
         self._camera()
 
     def _build_camp(mut self) raises:
-        """B2: a rope of ROPE_SEGS capsules hanging from a beam, joined end to end by ball joints, with a 5 kg ball at the
-        end pushed sideways so it swings. B3: a banner of FLAG_NX x FLAG_NZ cells, its edge on the pole pinned, in a wind."""
+        """B2: ludens-core's rope (physics.rope.Rope, ROPE_SEGS segments) from a beam to a 5 kg ball pushed sideways so it
+        swings; its ends are attached to the beam and the ball, and `tie` carries the ball on a distance joint of the
+        rope's length. B3: a banner of FLAG_NX x FLAG_NZ cells, its edge on the pole pinned, in a wind."""
         self.camp_built = True
         self.rope_beam = self.world.add_box(ROPE_TOP, Vec3(0.6, 0.1, 0.1, 0.0), 0.0, True)
-        var prev = self.rope_beam
-        var prev_anchor = Vec3(0.0, 0.0, 0.0, 0.0)
-        for k in range(ROPE_SEGS):
-            var c = ROPE_TOP - Vec3(0.0, ROPE_END * Real(2 * k + 1), 0.0, 0.0)
-            var h = self.world.add_capsule(c, ROPE_R, ROPE_HALF, 0.4, False)
-            self.world.set_layer(h, CAT_ROPE, ALL_LAYERS ^ CAT_ROPE)
-            _ = self.world.add_ball_joint(prev, h, prev_anchor, Vec3(0.0, ROPE_END, 0.0, 0.0))
-            self.rope.append(h)
-            prev = h
-            prev_anchor = Vec3(0.0, -ROPE_END, 0.0, 0.0)
-        var wc = ROPE_TOP - Vec3(0.0, ROPE_END * Real(2 * ROPE_SEGS) + ROPE_WEIGHT_R, 0.0, 0.0)
-        var wgt = self.world.add_sphere(wc, ROPE_WEIGHT_R, 5.0, False)
+        var total = ROPE_SEG_LEN * Real(ROPE_SEGS)
+        var tip = ROPE_TOP - Vec3(0.0, total, 0.0, 0.0)
+        var wgt = self.world.add_sphere(tip - Vec3(0.0, ROPE_WEIGHT_R, 0.0, 0.0), ROPE_WEIGHT_R, 5.0, False)
         self.world.set_layer(wgt, CAT_ROPE, ALL_LAYERS ^ CAT_ROPE)
-        _ = self.world.add_ball_joint(prev, wgt, prev_anchor, Vec3(0.0, ROPE_WEIGHT_R, 0.0, 0.0))
-        self.rope.append(wgt)
+        var rope = Rope(ROPE_TOP, tip, ROPE_SEGS, ROPE_MASS)
+        rope.attach(0, self.world.scene, unpack_body(self.rope_beam).index(), Vec3(0.0, 0.0, 0.0, 0.0))
+        rope.attach(1, self.world.scene, unpack_body(wgt).index(), Vec3(0.0, ROPE_WEIGHT_R, 0.0, 0.0))
+        _ = rope.tie(self.world.scene)
+        self.rope = rope^
+        self.rope_ball = wgt
         self.world.set_velocity(wgt, Vec3(4.0, 0.0, 0.0, 0.0), Vec3(0.0, 0.0, 0.0, 0.0))
         var m = grid_mesh(FLAG_NX, FLAG_NZ, FLAG_W, FLAG_H, FLAG_POLE)
         var fl = MeshCloth(m[0], m[1], 0.1, 0, 1e-3)
@@ -852,4 +854,8 @@ struct Frontier(Movable):
         var before = len(self.world.frame_fracture)
         self.world.physics_tick()
         self.fracture_events += len(self.world.frame_fracture) - before
+        if self.rope:
+            var rp = self.rope.take()
+            rp.step(self.world.scene, DT, G)
+            self.rope = rp^
         self._check_goals()

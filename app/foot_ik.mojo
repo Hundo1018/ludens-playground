@@ -7,18 +7,22 @@ the ground: the ankle is raised by g under that foot, so the clip's lift (swing,
 and foot_plant's tilt (at most MAX_TILT) turns the foot toward the slope's normal. The pelvis is lowered by the lower foot's offset when that is negative (the whole body moves
 down), so the downhill leg can reach. two_bone gives the new knee and ankle positions with the knee bending toward where
 it already points; they become two rotations of the model-space joint matrices: the thigh's subtree about the hip (the
-knee onto its new position), then the shin's subtree about the new knee (the ankle onto its target). The palette is
-rebuilt from those matrices. The step from two_bone's positions to joint rotations is the playground's own (ludens-engine#76:
-the engine's IK returns positions, not a pose).
+knee onto its new position), then the shin's subtree about the new knee (the ankle onto its target). Both steps are
+ludens-core's procedural.ik_pose.two_bone_pose on the joints' model-space Pose (CesiumMan's joint matrices are rigid, so a
+position and a unit quaternion hold each one); the palette is rebuilt from that pose.
 
 Joints (CesiumMan): hip 11 / 12, knee 13 / 14, ankle 15 / 16, toe 17 / 18 (left / right); 0 is the pelvis.
 The error of a foot is its ankle's height above the ground under it minus the clip's ankle height above the flat floor:
 0 when the foot sits on the slope exactly as the clip set it on the floor. Without IK it is -g.
 """
-from std.math import sqrt, acos, sin, cos, tan
+from std.math import sin, cos, tan
 from geometry.mat import Mat4
-from geometry.vec import Real, Vec3, dot, cross, length, normalize
-from procedural.ik import two_bone, foot_plant
+from geometry.vec import Real, Vec3, normalize
+from geometry.quat import Quat, quat_from_mat3
+from geometry.mat import Mat3
+from procedural.anim_graph import Pose
+from procedural.ik_pose import two_bone_pose, rotate_subtree
+from procedural.ik import foot_plant
 from frontier_assets import Character, locals_at, strip_root_xz
 from app.skin_pass import palette_to_mats
 
@@ -63,51 +67,31 @@ def _pos(m: Mat4) -> Vec3:
     return Vec3(m.get(0, 3), m.get(1, 3), m.get(2, 3), 0.0)
 
 
-def _rot_about(axis: Vec3, angle: Real, pivot: Vec3) -> Mat4:
-    """The rotation by `angle` about the line through `pivot` along unit `axis`, as a 4x4 matrix."""
-    var c = cos(angle)
-    var s = sin(angle)
-    var t = 1 - c
-    var x = axis[0]
-    var y = axis[1]
-    var z = axis[2]
-    var r = Mat4.identity()
-    r.set(0, 0, t * x * x + c)
-    r.set(0, 1, t * x * y - s * z)
-    r.set(0, 2, t * x * z + s * y)
-    r.set(1, 0, t * x * y + s * z)
-    r.set(1, 1, t * y * y + c)
-    r.set(1, 2, t * y * z - s * x)
-    r.set(2, 0, t * x * z - s * y)
-    r.set(2, 1, t * y * z + s * x)
-    r.set(2, 2, t * z * z + c)
-    for i in range(3):
-        var rp = r.get(i, 0) * pivot[0] + r.get(i, 1) * pivot[1] + r.get(i, 2) * pivot[2]
-        r.set(i, 3, pivot[i] - rp)
-    return r^
 
 
-def _turn(a: Vec3, b: Vec3, pivot: Vec3) -> Mat4:
-    """The smallest rotation about `pivot` taking direction a onto direction b."""
-    var la = length(a)
-    var lb = length(b)
-    if la < 1e-9 or lb < 1e-9:
-        return Mat4.identity()
-    var ax = cross(a, b)
-    var n = length(ax)
-    var cs = max(Real(-1), min(Real(1), dot(a, b) / (la * lb)))
-    if n < 1e-9:
-        return Mat4.identity()
-    return _rot_about(ax * (1 / n), acos(cs), pivot)
+
+def _to_pose(world: List[Mat4]) -> Pose:
+    """Rigid joint matrices as a Pose (position, unit quaternion)."""
+    var out = Pose(len(world))
+    for j in range(len(world)):
+        var r = Mat3()
+        for a in range(3):
+            for b in range(3):
+                r.set(a, b, world[j].get(a, b))
+        out.set(j, _pos(world[j]), quat_from_mat3(r).normalized())
+    return out^
 
 
-def _in_subtree(parents: List[Int], j: Int, top: Int) -> Bool:
-    var k = j
-    while k >= 0:
-        if k == top:
-            return True
-        k = parents[k]
-    return False
+def _to_mats(pose: Pose) -> List[Mat4]:
+    var out = List[Mat4]()
+    for j in range(pose.bones):
+        var m = pose.q(j).to_mat4()
+        var p = pose.p(j)
+        m.set(0, 3, p[0])
+        m.set(1, 3, p[1])
+        m.set(2, 3, p[2])
+        out.append(m^)
+    return out^
 
 
 def _model_mats(c: Character, clip: List[Float32], frame: Int) raises -> List[Mat4]:
@@ -149,6 +133,7 @@ def foot_ik(c: Character, clip: List[Float32], frame: Int, slope: Slope, on: Boo
         if drop < 0:
             for j in range(c.joint_count):
                 world[j].set(1, 3, world[j].get(1, 3) + drop)
+        var pose = _to_pose(world)
         for side in range(2):
             var hip = HIP_L if side == 0 else HIP_R
             var knee = KNEE_L if side == 0 else KNEE_R
@@ -157,25 +142,14 @@ def foot_ik(c: Character, clip: List[Float32], frame: Int, slope: Slope, on: Boo
             var g = g_l if side == 0 else g_r
             var plant = foot_plant(clip_ankle, clip_ankle[1], g, slope.normal_model(), MAX_LIFT, MAX_TILT)
             var target = plant.ankle
-            var ph = _pos(world[hip])
-            var pk = _pos(world[knee])
-            var pa = _pos(world[ankle])
+            var ph = pose.p(hip)
+            var pk = pose.p(knee)
+            var pa = pose.p(ankle)
             var pole = pk + (pk - (ph + pa) * Real(0.5))
-            var tb = two_bone(ph, pk, pa, target, pole)
-            var r1 = _turn(pk - ph, tb.mid - ph, ph)
-            for j in range(c.joint_count):
-                if _in_subtree(c.parents, j, hip):
-                    world[j] = r1.copy() * world[j].copy()
-            var pa1 = _pos(world[ankle])
-            var r2 = _turn(pa1 - tb.mid, tb.end - tb.mid, tb.mid)
-            for j in range(c.joint_count):
-                if _in_subtree(c.parents, j, knee):
-                    world[j] = r2.copy() * world[j].copy()
+            _ = two_bone_pose(pose, c.parents, hip, knee, ankle, target, pole)
             if plant.planted and plant.foot_angle > 1e-6:
-                var r3 = _rot_about(normalize(plant.foot_axis), plant.foot_angle, _pos(world[ankle]))
-                for j in range(c.joint_count):
-                    if _in_subtree(c.parents, j, ankle):
-                        world[j] = r3.copy() * world[j].copy()
+                rotate_subtree(pose, c.parents, ankle, pose.p(ankle), Quat.from_axis_angle(normalize(plant.foot_axis), plant.foot_angle))
+        world = _to_mats(pose)
     var e = List[Real]()
     for side in range(2):
         var ankle = ANKLE_L if side == 0 else ANKLE_R

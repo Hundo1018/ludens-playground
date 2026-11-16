@@ -8,7 +8,7 @@ The four corners (112,112), (144,112), (144,144), (112,144) lie in the street ga
 tests/town_native.mojo). Residents loop the corners, starting at spread points on the streets. The guard patrols the
 same loop until the player stands inside the town square; then it closes on the player.
 """
-from app.nav_boxes import tri, nav_box
+from nav.nav_input import nav_tri, nav_box
 from frontier.world import StaticBox
 from geometry.vec import Real, Vec3
 from nav.heightfield import NavBakeConfig
@@ -108,8 +108,8 @@ def town_mesh(boxes: List[StaticBox]) raises -> NavMesh:
     var tris = List[Int]()
     var a = CENTRE - HALF
     var b = CENTRE + HALF
-    tri(verts, tris, Vec3(a, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, a, 0.0))
-    tri(verts, tris, Vec3(b, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, b, 0.0))
+    nav_tri(verts, tris, Vec3(a, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, a, 0.0))
+    nav_tri(verts, tris, Vec3(b, 0.0, a, 0.0), Vec3(a, 0.0, b, 0.0), Vec3(b, 0.0, b, 0.0))
     for bx in boxes:
         nav_box(verts, tris, bx.c, bx.h)
     return bake_navmesh(verts, tris, NavBakeConfig(0.25, 0.1, 1.8, 0.3, 0.4, 45.0, 32))

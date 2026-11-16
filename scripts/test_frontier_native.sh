@@ -68,6 +68,13 @@ python3 -m ludens_wasm_rt.build_wasm \
   -I build/deps/ludens-engine -I . -I app \
   tests/town_native.mojo --target native -o build/town_native
 build/town_native
+# audit A3: the town's and the crowd's navmeshes are unchanged by building their input with ludens-core's nav.nav_input
+python3 -m ludens_wasm_rt.build_wasm \
+  --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
+  -I build/deps/ludens-core -I build/deps/wgpu-mojo -I build/deps/miniaudio-mojo -I build/deps/miniaudio-mojo/examples/web \
+  -I build/deps/ludens-engine -I . -I app \
+  tests/navmesh_native.mojo --target native -o build/navmesh_native
+build/navmesh_native
 # Reference baseline E1: the town's characters pick walk or run by motion matching on their speed.
 python3 -m ludens_wasm_rt.build_wasm \
   --lib build/deps/ludens-core --lib build/deps/wgpu-mojo --lib build/deps/miniaudio-mojo --lib build/deps/ludens-engine --lib . \
