@@ -7,7 +7,7 @@ scripts/build_crowd.sh; the exports are playground_crowd_* and the handle is an 
 from app.crowd import CrowdState, CrowdRow, positions_hash
 from frontier.world import StaticBox
 from geometry.vec import Real, Vec3
-from wgpu._backend.wgpu_native.alloc_guard import raw_alloc
+from wgpu import raw_alloc
 
 
 struct CrowdHost(Movable):

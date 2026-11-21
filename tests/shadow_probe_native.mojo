@@ -9,8 +9,8 @@ from wgpu import (
     WGPUBufferBindingLayout, WGPUSamplerBindingLayout, WGPUTextureBindingLayout, WGPUStorageTextureBindingLayout,
     WGPUBindGroupEntry, WGPUMapMode, WGPUTextureFormat, WGPUTextureUsage,
 )
-from wgpu._ffi.nulls import null_opaque
-from wgpu._backend.wgpu_native.structs import WGPUColor
+from wgpu import null_opaque
+from wgpu import WGPUColor
 
 comptime SHADOW_CS = """
 @group(0) @binding(0) var shadow : texture_depth_2d;
