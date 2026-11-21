@@ -356,7 +356,7 @@ struct Host(Movable):
         self.renderer.value().begin(view)
         # V4: the atmosphere (sky gradient, fog toward the horizon colour, linear lighting with ACES) and the sky: a sphere
         # 380 m across the camera (inside the 400 m far plane) with the engine's sky material
-        self.renderer.value().mesh.set_atmosphere(self.boot.device(), Vec3(Real(SKY_TOP_R), Real(SKY_TOP_G), Real(SKY_TOP_B), Real(0.0)),
+        self.renderer.value().set_atmosphere(self.boot.device(), Vec3(Real(SKY_TOP_R), Real(SKY_TOP_G), Real(SKY_TOP_B), Real(0.0)),
             Vec3(Real(SKY_HOR_R), Real(SKY_HOR_G), Real(SKY_HOR_B), Real(0.0)), Float32(FOG_DENSITY), Float32(EXPOSURE), self.atmo_on, self.atmo_on, Float32(SKY_CURVE))
         if self.atmo_on or self.skymark:
             var eye = m.camera().position
@@ -398,16 +398,16 @@ struct Host(Movable):
         self.hud.value().set(m.hud(Float32(self.width), Float32(self.height), self.frame_ms), Float32(self.width), Float32(self.height))
         # the sun's depth pass, then the arena pass samples its shadow map (the factor is 1.0 with ?noshadow)
         var light = _light_vp()
-        self.renderer.value().mesh.set_shadow(self.boot.device(), light, self.shadow_on)
+        self.renderer.value().set_shadow(self.boot.device(), light, self.shadow_on)
         if self.ao_on and not self.ao_done:  # W10: the floor's occlusion, traced on the GPU over the pillars once
             var cells = ao_bake(hub_ao_boxes(m.world), AO_N, AO_X0, AO_X0, AO_SIZE)  # ludens-engine#79
-            self.renderer.value().mesh.set_ao(self.boot.device(), cells, AO_N, AO_N, AO_X0, AO_X0, AO_SIZE, AO_SIZE, True)
+            self.renderer.value().set_ao(self.boot.device(), cells, AO_N, AO_N, AO_X0, AO_X0, AO_SIZE, AO_SIZE, True)
             m.hud_extra = ["SOFTWARE RAY-TRACED AO"]  # the HUD names the term (W10; a host line, ludens-engine#72)
             self.ao_done = True
         if self.shadow_on:
             if not self.shadow:
                 self.shadow = ShadowPass(self.boot.device(), WGPUTextureFormat.Depth32Float)
-            var sview = self.renderer.value().mesh.shadow_tex.create_view_default()
+            var sview = self.renderer.value().res.shadow_tex.create_view_default()
             # the characters, the crowd and the town cast too: their skinned items, and the palette the skin pass reads this frame
             for it in self.renderer.value().items:
                 if it.pose_id >= 0 and it.mesh_id >= 0:
