@@ -10,7 +10,7 @@ from game.controls import Controls
 from geometry.vec import Real
 from scene import Scene
 from hud import Hud
-from render3d import ArenaRenderer
+from render3d import SceneRenderer
 from app.shadow_pass import ShadowPass
 from app.ao_bake import ao_bake
 from app.hub_ao import hub_ao_boxes, AO_N, AO_X0, AO_SIZE
@@ -95,7 +95,7 @@ struct Host(Movable):
     var world: Optional[FrontierMode]
     var input: InputState
     var controls: Controls
-    var renderer: Optional[ArenaRenderer]
+    var renderer: Optional[SceneRenderer]
     var hud: Optional[Hud]
     var game_format: UInt32
     var capture: Optional[FrameCapture]
@@ -351,7 +351,7 @@ struct Host(Movable):
         if not self.hud:
             self.hud = Hud(self.boot.device(), format)
         if not self.renderer:
-            self.renderer = ArenaRenderer(self.boot.device(), format, view, texture_layers=TEXTURE_LAYERS)  # frontier/world.mojo LAYER_*
+            self.renderer = SceneRenderer(self.boot.device(), format, view, texture_layers=TEXTURE_LAYERS)  # frontier/world.mojo LAYER_*
         self._register()
         self.renderer.value().begin(view)
         # V4: the atmosphere (sky gradient, fog toward the horizon colour, linear lighting with ACES) and the sky: a sphere
