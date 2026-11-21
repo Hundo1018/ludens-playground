@@ -36,6 +36,9 @@ struct FrontierMode(GameMode):
     def cues(mut self) -> List[Int]:
         return List[Int]()
 
+    def sounds(self, rate: Int) -> List[List[Float32]]:
+        return List[List[Float32]]()  # the Frontier's sound goes through the host's own audio scene
+
     def hud(self, width: Float32, height: Float32, frame_ms: Float32) raises -> DrawList:
         return build_frontier_hud(self.world, width, height, frame_ms, self.hud_extra)
 
