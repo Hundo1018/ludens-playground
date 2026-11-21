@@ -37,17 +37,17 @@ from crowd import CrowdState, CrowdRow, positions_hash
 from town import Town, RESIDENTS, CONTACT_R
 from geometry.mat import Mat4, transform_point4
 from game.draw_item import DrawItem
-from wgpu._backend.wgpu_native.types import WGPUTextureAspect
-from wgpu._backend.wgpu_native.structs import WGPUExtent3D, WGPUOrigin3D, WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo
+from wgpu import WGPUTextureAspect
+from wgpu import WGPUExtent3D, WGPUOrigin3D, WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo
 from wgpu.buffer import Buffer
 from wgpu import WGPUMapMode
-from wgpu._backend.wgpu_native.alloc_guard import raw_alloc
-from wgpu._ffi.types import WGPUBufferUsage
+from wgpu import raw_alloc
+from wgpu import WGPUBufferUsage
 from geometry.quat import Quat
 from geometry.vec import Real, Vec3
 from std.math import atan2, cos, sin
-from wgpu._backend.wgpu_native.alloc_guard import raw_alloc
-from wgpu._ffi.types import WGPUTextureFormat, WGPUTextureHandle, WGPUTextureUsage
+from wgpu import raw_alloc
+from wgpu import WGPUTextureFormat, WGPUTextureHandle, WGPUTextureUsage
 from wgpu.buffer import MapRequest
 from wgpu.capture import FrameCapture, padded_row_pitch
 from wgpu.rendercanvas.glfw import MojoInputEvent

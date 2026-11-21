@@ -14,7 +14,7 @@ from wgpu import (
     WGPUBufferBindingLayout, WGPUSamplerBindingLayout, WGPUTextureBindingLayout, WGPUStorageTextureBindingLayout,
     WGPUBindGroupEntry, WGPUMapMode, WGPUTextureFormat, WGPUTextureUsage,
 )
-from wgpu._ffi.nulls import null_opaque
+from wgpu import null_opaque
 
 comptime READ_CS = """
 @group(0) @binding(0) var a : texture_depth_2d;

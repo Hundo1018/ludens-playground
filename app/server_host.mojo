@@ -7,7 +7,7 @@ are playground_server_* and the handle is an address in this module's memory (as
 from gameplay.netcode import SnapshotServer
 from app.net_frontier import FrontierSim
 from geometry.vec import Real
-from wgpu._backend.wgpu_native.alloc_guard import raw_alloc
+from wgpu import raw_alloc
 
 comptime SERVER_INTERVAL = 3
 comptime MODULUS = UInt64(1000000007)
