@@ -1,7 +1,7 @@
 # Spike: can an outside package use the engine's renderer modules unchanged (app/render3d.mojo, app/hud.mojo)?
 from render3d import ArenaRenderer
 from hud import Hud
-from game.arena_mode import ArenaMode
+from arena.arena_mode import ArenaMode
 from game.intent import Intent
 
 

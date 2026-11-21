@@ -8,7 +8,7 @@ box is at (40, 40) and the mirrored texels are open (1.0).
 """
 from harness.runner import Suite
 from geometry.vec import Real, Vec3
-from game.arena import DrawItem
+from game.draw_item import DrawItem
 from app.mesh_pass import MeshRegistry, unit_cube_arrays
 from app.shadow_pass import ShadowPass
 from wgpu import (

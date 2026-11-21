@@ -36,7 +36,7 @@ from gameplay.netcode import SnapshotClient
 from crowd import CrowdState, CrowdRow, positions_hash
 from town import Town, RESIDENTS, CONTACT_R
 from geometry.mat import Mat4, transform_point4
-from game.arena import DrawItem
+from game.draw_item import DrawItem
 from wgpu._backend.wgpu_native.types import WGPUTextureAspect
 from wgpu._backend.wgpu_native.structs import WGPUExtent3D, WGPUOrigin3D, WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo
 from wgpu.buffer import Buffer

@@ -1,5 +1,5 @@
 """The Frontier world as a `GameMode`: a wrapper over `game/frontier.mojo`, with no behaviour of its own."""
-from game.arena import DrawItem
+from game.draw_item import DrawItem
 from frontier.world import Frontier
 from frontier.hud import build_frontier_hud
 from game.intent import Intent
@@ -15,6 +15,10 @@ struct FrontierMode(GameMode):
     def __init__(out self) raises:
         self.world = Frontier()
         self.hud_extra = List[String]()
+
+    @staticmethod
+    def create() raises -> Self:
+        return Self()
 
     def __init__(out self, *, deinit move: Self):
         self.world = move.world^
