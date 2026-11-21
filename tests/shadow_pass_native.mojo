@@ -6,7 +6,7 @@ test checks them: the box texel is nearer than the open one, and the open one is
 """
 from harness.runner import Suite
 from geometry.vec import Real, Vec3
-from game.arena import DrawItem
+from game.draw_item import DrawItem
 from app.mesh_pass import MeshRegistry, unit_cube_arrays
 from app.shadow_pass import ShadowPass
 from wgpu import (

@@ -5,7 +5,7 @@ from frontier.world import (
     Frontier, zone_name, GOAL_COUNT, STAT_GOALS, STAT_CELLS_LOADED, STAT_CELLS_TOTAL, STAT_BODIES_LIVE, STAT_BODIES_TOTAL, STAT_DRAWN, STAT_CULLED,
     STAT_LOADS, STAT_UNLOADS, STAT_ZONE,
 )
-from game.hud_layout import dot_scale, PANEL, WHITE, GOLD, GREEN, RED
+from arena.hud_layout import dot_scale, PANEL, WHITE, GOLD, GREEN, RED
 from ui.draw import DrawList
 from ui.font import draw_text, text_width
 from ui.geom import Rect

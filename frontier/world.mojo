@@ -18,7 +18,7 @@ What the engine does here:
 Determinism: the same `Intent` per frame gives the same `hash()`. Streaming runs on tick numbers, not on time."""
 from embed.world import EmbedWorld, pack_body
 from embed.ragdoll import EmbedRagdoll, RagdollSpec, RAG_SPHERE
-from game.arena import DrawItem
+from game.draw_item import DrawItem
 from game.intent import Intent
 from gameplay.camera_rig import SpringArm
 from gameplay.large_world import WorldPartition, WorldPos, BodySpec, SPEC_BOX, SPEC_SPHERE, EV_LOAD

@@ -7,6 +7,7 @@ from harness.runner import Suite
 from wgpu import Instance, WGPUTextureFormat
 from app.textures import TextureArray
 from app.mesh_pass import MeshPass
+from app.render_res import RenderResources
 
 
 def main() raises:
@@ -14,7 +15,8 @@ def main() raises:
     var instance = Instance()
     var device = instance.request_adapter().request_device()
     var tex = TextureArray(device, UInt32(2))
-    var mesh = MeshPass(device, WGPUTextureFormat.RGBA8Unorm, WGPUTextureFormat.Depth32Float, tex)
+    var res = RenderResources(device)
+    var mesh = MeshPass(device, WGPUTextureFormat.RGBA8Unorm, WGPUTextureFormat.Depth32Float, tex, res)
     print("mesh pass built with the shadow bindings", flush=True)
     var identity: List[Float32] = [
         Float32(1.0), Float32(0.0), Float32(0.0), Float32(0.0),
@@ -25,11 +27,11 @@ def main() raises:
     var short: List[Float32] = [Float32(1.0), Float32(0.0)]
     var rejected = False
     try:
-        mesh.set_shadow(device, short, True)
+        res.set_shadow(device, short, True)
     except:
         rejected = True
     s.check(rejected, "set_shadow rejects a matrix that is not 16 floats")
-    mesh.set_shadow(device, identity, True)
-    mesh.set_shadow(device, identity, False)
+    res.set_shadow(device, identity, True)
+    res.set_shadow(device, identity, False)
     s.check(True, "set_shadow accepts a 16-float light matrix, on and off")
     s.finish()

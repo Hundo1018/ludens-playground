@@ -1,10 +1,10 @@
 """The playground's wasm entry point: the package's own exports over the engine's game seam (game/mode.mojo).
 
-Each `@export` below is part of this package's surface. The engine supplies the game (`game.arena_mode`); this file decides
+Each `@export` below is part of this package's surface. The engine supplies the game seam (`game.mode`); the arena sample game lives in `arena/`; this file decides
 what the page can call. Build: `scripts/build_wasm.sh`; check: `node scripts/check_wasm.mjs`."""
 from frontier.mode import FrontierMode
 from frontier.world import STAT_BODIES_LIVE
-from game.arena_mode import ArenaMode
+from arena.arena_mode import ArenaMode
 from game.intent import Intent
 
 
