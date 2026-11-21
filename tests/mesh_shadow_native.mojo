@@ -27,11 +27,11 @@ def main() raises:
     var short: List[Float32] = [Float32(1.0), Float32(0.0)]
     var rejected = False
     try:
-        mesh.set_shadow(device, short, True)
+        res.set_shadow(device, short, True)
     except:
         rejected = True
     s.check(rejected, "set_shadow rejects a matrix that is not 16 floats")
-    mesh.set_shadow(device, identity, True)
-    mesh.set_shadow(device, identity, False)
+    res.set_shadow(device, identity, True)
+    res.set_shadow(device, identity, False)
     s.check(True, "set_shadow accepts a 16-float light matrix, on and off")
     s.finish()
