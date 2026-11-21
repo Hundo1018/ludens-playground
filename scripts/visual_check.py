@@ -49,6 +49,12 @@ BOUNDS = {
     "wall_layers": (3, None),
     "mean_lum": (25.0, None),
 }
+# Per-view overrides of BOUNDS. The camp hangs a rope and a banner from above the frame: against the sky band each one
+# crosses a few columns with sky below it, so floating_cols counts them. Measured on the CI runner (lavapipe), the camp
+# gives 1.7 % to 2.2 % depending on the rope's pose at capture (six runs: 1.667, 1.875, 1.875, 2.187, 2.187, 2.187 %;
+# 0.2 % to 1.0 % on a local software adapter). The defect the metric exists for (border walls over unloaded ground)
+# measured 82 % in this view, so 4 % still fails it by a factor of 20.
+VIEW_BOUNDS = {"camp": {"floating_cols": (None, 0.04)}}
 REQUIRED = {"hub": ("sky_grad", "fog"), "town": ("wall_layers",)}
 HUD_BOXES = [(0, 0, 170, 75)]  # the top-left status box, in a 960x540 frame; scaled to the frame size
 HUD_BOTTOM = 32  # the help bar's height at the bottom, in a 540-high frame
@@ -200,7 +206,7 @@ def check(metrics: dict) -> list[str]:
             if view in metrics and key not in metrics[view]:
                 bad.append(f"{view}.{key} could not be measured")
     for view, m in metrics.items():
-        for key, (lo, hi) in BOUNDS.items():
+        for key, (lo, hi) in {**BOUNDS, **VIEW_BOUNDS.get(view, {})}.items():
             if key not in m:
                 continue
             v = m[key]
