@@ -159,15 +159,18 @@ for (const [which, frame] of b3Cases) {
   console.log(`B3 ${name} frame ${frame}: max |GPU - CPU| = ${err} m`);
   need(started === 0 && err >= 0 && err < 1e-3, `B3: ${name} frame ${frame}, every vertex GPU against CPU below 1e-3 m (max ${err} m)`);
 }
-// the characters animate with no input: the picture changes between frame 30 and frame 60
+// the characters animate with no input: the picture changes between frames 30, 60 and 90. One pair of frames can land on
+// poses that nearly coincide (the run cycle), so the check takes the largest of the three pairs.
 for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 30) break; await sleep(100); }
 const idle30 = await grab('idle30');
 for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 60) break; await sleep(100); }
 const idle60 = await grab('idle60');
+for (let i = 0; i < 600; i++) { if ((await js('window.host && window.host.frames')) >= 90) break; await sleep(100); }
+const idle90 = await grab('idle90');
 // The threshold was 500 px while a 1.5 m CesiumMan stood in the frame. W3 (the protagonist as a Fox at the player's
 // feet, plus the circling Fox) gives 385 px on the measured page. A still frame gives 0, so 200 px still means the
 // characters animate.
-if (idle30 && idle60) { const n = differ(idle30, idle60); need(n > 200, `idle: the picture changes between frame 30 and frame 60 (${n} pixels), so the characters animate`); }
+if (idle30 && idle60 && idle90) { const n = Math.max(differ(idle30, idle60), differ(idle60, idle90), differ(idle30, idle90)); need(n > 200, `idle: the picture changes between frames 30, 60 and 90 (largest pair ${n} pixels), so the characters animate`); }
 // C2, on the page: the wall texture's mip 0 and mip 4 read back from the GPU equal the converted levels exactly
 const texStarted = await js('window.host.x.playground_host_texture_start(window.host.app)');
 need(texStarted === 0, 'C2: the texture readback starts once the wall is on the renderer');
