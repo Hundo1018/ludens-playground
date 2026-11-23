@@ -152,7 +152,7 @@ Vertex buffers are non-interleaved, one per blob.
 
 - Items with `mesh_id = -1` take the old path.
 - These must pass unchanged:
-  - Engine `build-pages --check` (game-shot, touch-check), `game-parity`, and the existing `test-game` counts (arena 27, arena_controls 7, arena_camera 9, arena_sfx 19, arena_hud 7, arena_input 9, game_mode 8).
+  - Engine `build-pages --check` (game-shot, touch-check), `game-same`, and the existing `test-game` counts (arena 27, arena_controls 7, arena_camera 9, arena_sfx 19, arena_hud 7, arena_input 9, game_mode 8).
   - Playground `host_check`.
   - Playground parity hashes for arena frames 1–3: 12217565312237657556, 5883669775744707594, 3942389195991980829.
   - Playground parity hashes for Frontier frames 1–3: 12382180788556832807, 11744582151253365717, 1702746564582479634.
@@ -344,7 +344,7 @@ cd /home/user/engine-work && git checkout -q main && git pull -q && git checkout
 grep -n "struct DrawItem" -A 25 app/*.mojo
 grep -n -i "wgsl\|depth" app/render3d.mojo | head -40
 pixi run -e wasm test-game
-pixi run -e wasm game-parity
+pixi run -e wasm game-same
 pixi run -e wasm build-pages --check
 pixi run -e wasm check-layout
 pixi run -e wasm build-wasm
@@ -352,7 +352,7 @@ pixi run -e wasm build-wasm
 
 Expected output:
 - `test-game`: the seven existing counts from 1.9 unchanged, plus `mesh_pass: N / N`.
-- `game-parity`: PASS.
+- `game-same`: PASS.
 - `build-pages --check`: game-shot PASS and touch-check PASS.
 - `check-layout`: PASS.
 - `build-wasm`: the export count is 29 plus the new exports.

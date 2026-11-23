@@ -47,7 +47,7 @@
 
 | 階段 | 交付 | 關鍵決策 | 驗收(全部要有可重跑的檢查) |
 |---|---|---|---|
-| 1 世界骨架 | `?frontier`:512 m 地圖、`WorldPartition` 串流、玩家與鏡頭、視錐剔除、HUD 數字 | 物體一律以 `BodySpec` 註冊;地面是一塊常駐靜態方塊;串流以 tick 計數驅動以保確定性 | 無視窗測試;`frontier_check` 連過 3 次;`game-parity` 加入 frontier 雜湊 |
+| 1 世界骨架 | `?frontier`:512 m 地圖、`WorldPartition` 串流、玩家與鏡頭、視錐剔除、HUD 數字 | 物體一律以 `BodySpec` 註冊;地面是一塊常駐靜態方塊;串流以 tick 計數驅動以保確定性 | 無視窗測試;`frontier_check` 連過 3 次;`game-same` 加入 frontier 雜湊 |
 | T 貼圖 | 免費 CC0 貼圖、triplanar 貼圖取樣、逐像素光照、天空與霧 | 貼圖來源只用 CC0;下載清單與雜湊進版控,圖檔在建置時下載並轉成固定大小;方塊與球沒有 UV,所以用世界座標的 triplanar 取樣 | 原生與網頁都畫出貼圖;每張圖的來源與授權列在 `assets/CREDITS.md`;像素檢查確認畫面不是單色 |
 | 2 物理區 | 採石場:可破壞牆 + 關節機具;營地:布料旗、軟體、繩索 | 每區是一個 `Zone` 模組,先在主 wasm 內跑,量到超過預算再搬進 Worker;`EmbedWorld` 只允許一個破壞物體,所以牆只有一面 | 牆被撞後碎片數增加;旗的頂點位移;繩長守恆;離區後該區停止 tick |
 | 3 AI 區 | 城鎮:navmesh、ORCA 群眾、行為樹居民、感知 | navmesh 在進區時烘一次並快取;群眾數量由預算決定 | 到達率、最小間距不小於 0;行為樹狀態轉換;預設頁面切到 frontier |
@@ -73,7 +73,7 @@
 
 主體已在 PR #55。剩下:
 
-1. `scripts/game_parity.py` 增加 frontier:固定輸入 600 幀,比對原生與 wasm 的 `app_frontier_hash`。
+1. `scripts/game_same.py` 增加 frontier:固定輸入 600 幀,比對原生與 wasm 的 `app_frontier_hash`。
 2. 觸控:`FRONTIER_PAD`(搖桿、Jump、R),`touch_check.mjs` 參數化後對 `?frontier` 再跑一次。
 3. HUD 的各子系統耗時(目前只有整幀的 CPU 時間)。
 
@@ -291,7 +291,7 @@ S1-1 到 S1-4 已完成(PR #55)。剩下 S1-5 與 S1-6。
 
 **S1-5 原生對 wasm 的雜湊**
 
-打開 `scripts/game_parity.py` 與 `scripts/game_node.mjs`,找到 arena 的做法(固定輸入跑 N 幀後比 `app_game_hash`)。照同樣的結構加一段:`app_set_mode(app, 2)`,每幀 `app_input` 送 W 鍵按下,跑 600 幀,讀 `app_frontier_hash`;原生端在 `tests/frontier.mojo` 尾端印出同樣輸入的 `hash()`。兩邊數字必須相同。執行 `pixi run -e wasm game-parity`。
+打開 `scripts/game_same.py` 與 `scripts/game_node.mjs`,找到 arena 的做法(固定輸入跑 N 幀後比 `app_game_hash`)。照同樣的結構加一段:`app_set_mode(app, 2)`,每幀 `app_input` 送 W 鍵按下,跑 600 幀,讀 `app_frontier_hash`;原生端在 `tests/frontier.mojo` 尾端印出同樣輸入的 `hash()`。兩邊數字必須相同。執行 `pixi run -e wasm game-same`。
 
 **S1-6 觸控配置**
 
@@ -448,10 +448,10 @@ ls tests | grep -i web
 | 檢查 | 指令 | 涵蓋 |
 |---|---|---|
 | 規則與確定性 | `pixi run -e wasm test-game` | 每區的斷言與雜湊 |
-| 原生對 wasm | `pixi run -e wasm game-parity` | arena 與 frontier 雜湊 |
+| 原生對 wasm | `pixi run -e wasm game-same` | arena 與 frontier 雜湊 |
 | 瀏覽器 | `pixi run -e wasm build-pages --check`(連 3 次) | 鍵盤、觸控、frontier 串流與各區、之後的 range |
 | 多 wasm | `pixi run -e wasm multi-wasm-probe` | Worker 內雜湊與原生相同 |
-| 既有閘門 | CI:`parity-gate`、`check-layout`、`test-pad`、`test-vpad`、`test-cli` 等 | 不退步 |
+| 既有閘門 | CI:`web-check`、`check-layout`、`test-pad`、`test-vpad`、`test-cli` 等 | 不退步 |
 | 部署 | `curl -sS https://hundo1018.github.io/ludens-engine/build.txt` | 線上版本 |
 
 無法由我驗證:真實 GPU 與手機上的幀率、手感、聲音。每階段上線後請使用者試玩。
