@@ -55,8 +55,8 @@ comptime KEY_H: Int32 = 72
 comptime KEY_R: Int32 = 82
 comptime MOUSE_LEFT: Int32 = 0
 
-comptime SKY_TOP = (0.04, 0.08, 0.24)
-comptime SKY_HOR = (0.62, 0.42, 0.40)
+comptime SKY_TOP = (0.015, 0.02, 0.045)
+comptime SKY_HOR = (0.16, 0.17, 0.21)
 comptime SEED: UInt64 = 7
 
 
@@ -207,10 +207,10 @@ struct Host(Movable):
             var r = Renderer(self.boot.device(), format, view, caps=caps)
             var top = v3(SKY_TOP[0], SKY_TOP[1], SKY_TOP[2])
             var hor = v3(SKY_HOR[0], SKY_HOR[1], SKY_HOR[2])
-            r.set_atmosphere(self.boot.device(), top, hor, 0.004, 1.0, True, True, 0.4)
-            r.set_environment(self.boot.device(), sky_environment(top * Real(0.8), hor * Real(0.5), v3(0.03, 0.03, 0.04)))
-            r.set_sun(self.boot.device(), v3(-0.55, 0.42, 0.5), v3(1.0, 0.78, 0.6), 1.6)
-            r.set_lut(self.boot.device(), 16, graded_lut(16, 0.15, 1.12, 1.12))
+            r.set_atmosphere(self.boot.device(), top, hor, 0.012, 1.0, True, True, 0.4)
+            r.set_environment(self.boot.device(), sky_environment(v3(0.10, 0.12, 0.18), v3(0.16, 0.15, 0.15), v3(0.03, 0.03, 0.035)))
+            r.set_sun(self.boot.device(), v3(-0.55, 0.42, 0.5), v3(1.0, 0.84, 0.68), 1.4)
+            r.set_lut(self.boot.device(), 16, graded_lut(16, 0.08, 1.06, 0.95))
             r.bloom_threshold = 0.72
             r.bloom_intensity = 1.0
             # the scene's particles live in showcase/scene.mojo; the pass draws an empty system of its own, the host packs
@@ -230,7 +230,7 @@ struct Host(Movable):
         r.bloom_intensity = 1.0 if self.fx[FX_BLOOM] else 0.0
         r.lut_amount = 1.0 if self.fx[FX_GRADE] else 0.0
         ref device = self.boot.device()
-        r.set_shadow(device, sun_shadow_vp(v3(-0.55, 0.42, 0.5), v3(0.0, 0.0, -1.0), 16.0, 40.0), self.fx[FX_SHADOW])
+        r.set_shadow(device, sun_shadow_vp(v3(-0.55, 0.42, 0.5), v3(0.0, 0.0, -2.0), 12.0, 18.0), self.fx[FX_SHADOW])
         var lights = List[PointLight]()
         if self.fx[FX_LIGHTS]:
             for l in self.scene.lights:
@@ -258,17 +258,17 @@ struct Host(Movable):
 
     def _hud(self) -> DrawList:
         var dl = DrawList()
-        var size = Float32(16.0)
-        var line = Float32(22.0)
-        var panel = Color(0.03, 0.04, 0.07, 0.78)
+        var size = Float32(14.0)
+        var line = Float32(19.0)
+        var panel = Color(0.02, 0.025, 0.04, 0.62)
         var white = Color(1.0, 1.0, 1.0, 1.0)
         var on_c = Color(0.55, 0.95, 0.6, 1.0)
         var off_c = Color(0.6, 0.6, 0.65, 1.0)
         var x = Float32(14.0)
         var y = Float32(14.0)
-        var w = Float32(330.0)
+        var w = Float32(272.0)
         dl.fill(Rect(x, y, w, line * Float32(FX_COUNT + 4) + 16.0), panel)
-        dl.text(Rect(x + 10, y + 8, w - 20, line), "Ludens 視覺效果展示", white, 20.0)
+        dl.text(Rect(x + 10, y + 8, w - 20, line), "Ludens 視覺效果展示", white, 17.0)
         for i in range(FX_COUNT):
             var yy = y + 8 + line * Float32(i + 1) + 6
             var state = "開" if self.fx[i] else "關"
@@ -277,8 +277,8 @@ struct Host(Movable):
         dl.text(Rect(x + 10, yb, w - 20, line), "剛體 " + String(self.scene.body_count()) + " 個，粒子 " + String(self.scene.live_particles()) + " 個", white, size)
         dl.text(Rect(x + 10, yb + line, w - 20, line), "幀時間 " + _ms(self.frame_ms) + " ms（模擬 " + _ms(self.step_ms) + "，繪製 " + _ms(self.draw_ms) + "）", white, size)
         var hint = "空白鍵：丟十個物體　R：重來　H：隱藏說明　拖曳滑鼠：轉動鏡頭"
-        dl.fill(Rect(x, Float32(self.height) - 44, Float32(self.width) - 2 * x, 30), panel)
-        dl.text(Rect(x + 10, Float32(self.height) - 39, Float32(self.width) - 2 * x - 20, 24), hint, white, size)
+        dl.fill(Rect(x, Float32(self.height) - 40, 470.0, 26), panel)
+        dl.text(Rect(x + 10, Float32(self.height) - 36, 450.0, 20), hint, white, size)
         return dl^
 
     def _capture(mut self, format: UInt32) raises:
