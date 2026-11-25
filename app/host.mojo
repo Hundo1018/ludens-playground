@@ -3,7 +3,7 @@
 It follows the engine's `app/main.mojo` for the one mode this package runs (the Frontier, behind `GameMode`), and reuses
 the engine's renderer and HUD modules unchanged (`render3d`, `hud`, `controls`). The page is `page/`, which loads this
 module with the engine's JavaScript runtime."""
-from controls import read_keys
+from controls import read_frame
 from frontier.mode import FrontierMode
 from game.camera_view import View
 from game.controls import Controls
@@ -770,7 +770,7 @@ struct Host(Movable):
     def frame(mut self, dt: Float64) raises -> Int32:
         """0 while the GPU is still being set up, 1 once a frame was drawn."""
         self.clock += min(dt, 0.1)
-        var intent = self.controls.poll(read_keys(self.input))
+        var intent = self.controls.poll(read_frame(self.input))
         var m = self.world.take()
         m.step(intent, min(dt, 0.1))
         self._town_step(m)

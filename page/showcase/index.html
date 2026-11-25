@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-Hant"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ludens 視覺效果展示</title>
+<style>
+html,body{margin:0;background:#0d0f14;color:#9aa4b2;font:14px system-ui}
+canvas{display:block;margin:0 auto;max-width:100vw;height:auto}
+p{text-align:center;margin:8px 12px}
+button{margin:2px}
+</style>
+</head><body>
+<canvas id="canvas" width="1280" height="720"></canvas>
+<p id="fx"></p>
+<p>鍵盤 1 到 7 切換效果，空白鍵丟十個物體，R 重來，H 隱藏畫面上的說明，按住左鍵拖曳轉動鏡頭。需要支援 WebGPU 與 64 位元 WebAssembly 記憶體的瀏覽器（Chrome 133 以上或 Firefox 134 以上，桌面版）。</p>
+<p><a href="../index.html">Frontier</a> · <a href="OFL.txt">字型授權（Noto Sans TC，SIL OFL 1.1）</a></p>
+<pre id="log"></pre>
+<script type="module" src="./showcase.js"></script>
+</body></html>

@@ -66,4 +66,6 @@ WGPU=build/deps/wgpu-mojo
 cp "$WGPU/web/webgpu_host.mjs" "$WGPU/web/webgpu_impl.mjs" "$WGPU/web/webgpu_runtime.mjs" "$WGPU/web/webgpu_layout.json" "$OUT/"
 cp "$WGPU/scripts/webgpu_enum_strings.json" "$OUT/"
 cp "$(python3 -c 'import ludens_wasm_rt; print(ludens_wasm_rt.HOST_MJS)')" "$OUT/host.mjs"
+# the visual showcase (scripts/build_showcase.sh) as build/page/showcase/
+bash scripts/build_showcase.sh && rm -rf "$OUT/showcase" && cp -r build/showcase "$OUT/showcase"
 echo "build_page: $OUT ($(ls "$OUT" | wc -l) files)"
