@@ -2,10 +2,13 @@
 the HUD text. No GPU: `app/showcase_host.mojo` draws it; `tests/showcase_native.mojo` checks it.
 
 What is in the scene:
-- a floor and a back wall, two rows of seven spheres (gold metal and red plastic) whose roughness goes 0.05 .. 1;
-- a drop zone: a box or a ball falls from 9 m every DROP_EVERY seconds onto a static ramp and a pile, at most MAX_DYNAMIC
-  bodies (the oldest one leaves); every contact that begins with an impulse over SPARK_MIN_IMPULSE throws sparks there;
-- three point lights circling the pile, a smoke vent, an ember fountain and four glowing posts for the bloom.
+- a floor and a dark backdrop, a shelf with two rows of seven spheres (gold metal and white ceramic) whose roughness goes
+  0.05 .. 1;
+- a drop zone: a box or a ball falls from 7 m every DROP_EVERY seconds onto a steel ramp and a low plinth, at most
+  MAX_DYNAMIC bodies (the oldest one leaves); every contact that begins with an impulse over SPARK_MIN_IMPULSE throws
+  sparks there; the bodies take one of five colours (warm white, charcoal, steel, copper, one orange accent);
+- three point lights (two amber, one blue) circling the pile, a smoke vent, an ember fountain and four lamp posts for the
+  bloom.
 
 Everything follows from the seed and the number of `step` calls: `hash()` is the same on native and wasm64."""
 from embed.world import EmbedWorld, EVENT_BEGAN
@@ -19,18 +22,18 @@ from procedural.camera_math import CameraPose, look_rotation
 from scheduler.rng import SplitMix64
 
 comptime DT = 1.0 / 60.0
-comptime DROP_EVERY = 0.35  # seconds between two drops
-comptime MAX_DYNAMIC = 48  # dynamic bodies kept; the oldest is removed past this
+comptime DROP_EVERY = 0.5  # seconds between two drops
+comptime MAX_DYNAMIC = 30  # dynamic bodies kept; the oldest is removed past this
 comptime SPARK_MIN_IMPULSE: Float32 = 1.5  # a contact that begins with less makes no sparks
 comptime SPARKS_PER_STEP = 3  # bursts started in one physics step at most
 comptime SPARK_EMITTERS = 6  # emitters reused round-robin for the impact bursts
 comptime SETTLE_TICKS = 20
 comptime PARTICLE_CAP = 6000
 comptime TAU = 6.283185307179586
-comptime ORBIT_RADIUS = 15.0
-comptime ORBIT_HEIGHT = 5.5
-comptime ORBIT_SPEED = 0.12  # radians per second of the swing's phase while the camera is not dragged
-comptime YAW_LIMIT = 0.95  # the camera stays in front of the back wall
+comptime ORBIT_RADIUS = 14.0
+comptime ORBIT_HEIGHT = 4.8
+comptime ORBIT_SPEED = 0.15  # radians per second of the swing's phase while the camera is not dragged
+comptime YAW_LIMIT = 0.6  # the camera stays in front of the back wall
 
 
 def v3(x: Float64, y: Float64, z: Float64) -> Vec3:
@@ -55,19 +58,25 @@ struct Light(Copyable, ImplicitlyCopyable, Movable):
     var range: Float32
 
 
+comptime PALETTE_SIZE = 5
+
+
 def _palette(i: Int) -> Vec3:
-    """Six body colours, linear."""
+    """Five body colours, linear: warm white, charcoal, steel, copper and one orange accent."""
     if i == 0:
-        return v3(0.80, 0.18, 0.12)
+        return v3(0.62, 0.60, 0.56)
     if i == 1:
-        return v3(0.95, 0.62, 0.10)
+        return v3(0.045, 0.045, 0.05)
     if i == 2:
-        return v3(0.15, 0.55, 0.85)
+        return v3(0.60, 0.61, 0.63)
     if i == 3:
-        return v3(0.20, 0.72, 0.35)
-    if i == 4:
-        return v3(0.85, 0.85, 0.88)
-    return v3(0.55, 0.25, 0.80)
+        return v3(0.93, 0.62, 0.50)
+    return v3(0.80, 0.28, 0.07)
+
+
+def _palette_metal(i: Int) -> Float32:
+    """Steel and copper are metals; the other three are dielectrics."""
+    return Float32(1.0) if i == 2 or i == 3 else Float32(0.0)
 
 
 def spark_row() raises -> ParticlesRow:
@@ -91,7 +100,7 @@ def ember_row() raises -> ParticlesRow:
     """A continuous fountain of additive embers."""
     var r = particles_row(particles_default_table(), "spark")
     r.burst_count = 0
-    r.rate = 160
+    r.rate = 110
     r.cone_deg = 14
     r.speed_min = 5.0
     r.speed_max = 7.5
@@ -100,9 +109,9 @@ def ember_row() raises -> ParticlesRow:
     r.lifetime_min = 0.9
     r.lifetime_max = 1.5
     r.size_curve = [0.10, 0.07, 0.02]
-    r.color_start = [0.6, 1.6, 3.0, 1.0]
-    r.color_mid = [0.4, 0.9, 2.0, 0.8]
-    r.color_end = [0.1, 0.2, 0.8, 0.0]
+    r.color_start = [3.0, 1.7, 0.6, 1.0]
+    r.color_mid = [1.8, 0.6, 0.12, 0.8]
+    r.color_end = [0.4, 0.06, 0.0, 0.0]
     r.max_particles = 400
     return r^
 
@@ -202,30 +211,37 @@ struct Showcase(Movable):
         self.statics.append(Body(h, 1, v3(r, r, r), color, rough, metal))
 
     def _build(mut self) raises:
-        # floor and back wall
-        self._static_box(v3(0, -0.5, 0), v3(40, 0.5, 40), v3(0.10, 0.11, 0.13), 0.55, 0.0)
-        self._static_box(v3(0, 4.0, -12), v3(18, 4.0, 0.5), v3(0.22, 0.23, 0.26), 0.9, 0.0)
-        # the material rows: roughness 0.05 .. 1 left to right; gold metal behind, red plastic in front
+        # floor, a dark backdrop wide and tall enough that its edges stay out of the frame, and the shelf for the spheres
+        self._static_box(v3(0, -0.5, 0), v3(40, 0.5, 40), v3(0.16, 0.16, 0.17), 0.45, 0.0)
+        self._static_box(v3(0, 8.0, -13), v3(40, 8.0, 0.5), v3(0.06, 0.065, 0.075), 0.95, 0.0)
+        self._static_box(v3(0, 0.3, -6.6), v3(9.4, 0.3, 1.9), v3(0.10, 0.10, 0.11), 0.6, 0.0)
+        # the material rows: roughness 0.05 .. 1 left to right; gold metal behind, white ceramic in front
         for i in range(7):
             var x = -7.5 + 2.5 * Float64(i)
             var rough = Float32(0.05 + 0.95 * Float64(i) / 6.0)
-            self._static_sphere(v3(x, 0.8, -8.0), 0.8, v3(1.0, 0.76, 0.33), rough, 1.0)
-            self._static_sphere(v3(x, 0.6, -5.6), 0.6, v3(0.75, 0.08, 0.06), rough, 0.0)
-        # the drop zone: a tilted steel ramp and a low step, so falling bodies roll off and collide
+            self._static_sphere(v3(x, 1.4, -7.4), 0.8, v3(1.0, 0.76, 0.33), rough, 1.0)
+            self._static_sphere(v3(x, 1.2, -5.5), 0.6, v3(0.60, 0.58, 0.55), rough, 0.0)
+        # the drop zone: a low tray with a rim, a tilted steel ramp inside it, so falling bodies roll off, collide and
+        # stay in one pile
+        self._static_box(v3(0.5, 0.15, 1.5), v3(2.8, 0.15, 2.3), v3(0.12, 0.12, 0.13), 0.5, 0.0)
+        var rim = v3(0.30, 0.30, 0.32)
+        self._static_box(v3(0.5, 0.45, -0.85), v3(2.8, 0.15, 0.05), rim, 0.35, 1.0)
+        self._static_box(v3(0.5, 0.45, 3.85), v3(2.8, 0.15, 0.05), rim, 0.35, 1.0)
+        self._static_box(v3(-2.35, 0.45, 1.5), v3(0.05, 0.15, 2.3), rim, 0.35, 1.0)
+        self._static_box(v3(3.35, 0.45, 1.5), v3(0.05, 0.15, 2.3), rim, 0.35, 1.0)
         var ramp = Quat.from_axis_angle(v3(0, 0, 1), Real(0.32))
-        self._static_box(v3(-1.2, 1.2, 1.5), v3(2.4, 0.12, 1.6), v3(0.62, 0.63, 0.66), 0.25, 1.0, ramp)
-        self._static_box(v3(2.6, 0.25, 1.5), v3(1.4, 0.25, 2.2), v3(0.36, 0.34, 0.32), 0.6, 0.0)
-        # four posts with glowing caps (unlit colour above 1: the bloom picks them up)
+        self._static_box(v3(1.4, 0.85, 1.5), v3(1.3, 0.08, 1.1), v3(0.62, 0.63, 0.66), 0.25, 1.0, ramp)
+        # four thin lamp posts with glowing caps (unlit colour above 1: the bloom picks them up)
         for i in range(4):
             var a = TAU * (Float64(i) + 0.5) / 4.0
             var x = 7.5 * cos(a)
-            var z = 1.5 + 6.0 * sin(a)
-            self._static_box(v3(x, 1.0, z), v3(0.15, 1.0, 0.15), v3(0.1, 0.1, 0.11), 0.4, 1.0)
+            var z = 1.0 + 5.0 * sin(a)
+            self._static_box(v3(x, 1.0, z), v3(0.08, 1.0, 0.08), v3(0.05, 0.05, 0.055), 0.4, 1.0)
         # emitters: smoke from a vent at the back left, embers at the back right, dust over the pile, then the impact ones
-        self._static_box(v3(-9.0, 0.3, -3.0), v3(0.7, 0.3, 0.7), v3(0.2, 0.2, 0.2), 0.7, 0.3)
-        self._static_box(v3(9.0, 0.3, -3.0), v3(0.5, 0.3, 0.5), v3(0.2, 0.2, 0.25), 0.3, 1.0)
-        _ = self.particles.add(smoke_row(), -9.0, 0.7, -3.0, 11)
-        _ = self.particles.add(ember_row(), 9.0, 0.7, -3.0, 12)
+        self._static_box(v3(-9.0, 0.3, -2.5), v3(0.6, 0.3, 0.6), v3(0.08, 0.08, 0.09), 0.7, 0.3)
+        self._static_box(v3(9.0, 0.3, -2.5), v3(0.45, 0.3, 0.45), v3(0.08, 0.08, 0.09), 0.3, 1.0)
+        _ = self.particles.add(smoke_row(), -9.0, 0.7, -2.5, 11)
+        _ = self.particles.add(ember_row(), 9.0, 0.7, -2.5, 12)
         _ = self.particles.add(dust_row(), 0.5, 0.2, 1.5, 13)
         self.spark_first = len(self.particles.emitters)
         for k in range(SPARK_EMITTERS):
@@ -236,27 +252,28 @@ struct Showcase(Movable):
         var out = List[Vec3]()
         for i in range(4):
             var a = TAU * (Float64(i) + 0.5) / 4.0
-            out.append(v3(7.5 * cos(a), 2.15, 1.5 + 6.0 * sin(a)))
+            out.append(v3(7.5 * cos(a), 2.1, 1.0 + 5.0 * sin(a)))
         return out^
 
     def _lights(mut self):
         self.lights.clear()
-        var c = [v3(1.0, 0.35, 0.15), v3(0.2, 0.5, 1.0), v3(0.4, 1.0, 0.5)]
+        var c = [v3(1.0, 0.55, 0.25), v3(0.35, 0.55, 1.0), v3(1.0, 0.72, 0.45)]
         for i in range(3):
-            var a = self.time * 0.7 + TAU * Float64(i) / 3.0
-            self.lights.append(Light(v3(5.0 * cos(a), 2.2 + 0.6 * sin(self.time * 1.3 + Float64(i)), 1.5 + 5.0 * sin(a)), c[i], 6.0, 9.0))
+            var a = self.time * 0.5 + TAU * Float64(i) / 3.0
+            self.lights.append(Light(v3(4.5 * cos(a), 2.4 + 0.4 * sin(self.time * 1.1 + Float64(i)), 1.5 + 4.0 * sin(a)), c[i], 3.5, 7.0))
         var posts = self.glow_posts()
         for i in range(len(posts)):
-            self.lights.append(Light(posts[i], v3(1.0, 0.8, 0.5), 2.5, 4.0))
+            self.lights.append(Light(posts[i], v3(1.0, 0.72, 0.42), 1.6, 3.5))
 
     def _drop(mut self) raises:
         var r = self.rng.next_f32()
-        var x = Float64(self.rng.next_f32()) * 3.0 - 2.5
-        var z = Float64(self.rng.next_f32()) * 2.4 + 0.3
-        var pos = v3(x, 9.0, z)
-        var col = _palette(Int(self.rng.next_u64() % 6))
-        var metal = Float32(1.0) if self.rng.next_f32() < 0.35 else Float32(0.0)
-        var rough = Float32(0.15) + self.rng.next_f32() * Float32(0.6)
+        var x = Float64(self.rng.next_f32()) * 2.0 + 0.4
+        var z = Float64(self.rng.next_f32()) * 1.6 + 0.7
+        var pos = v3(x, 7.0, z)
+        var ci = Int(self.rng.next_u64() % PALETTE_SIZE)
+        var col = _palette(ci)
+        var metal = _palette_metal(ci)
+        var rough = Float32(0.2) + self.rng.next_f32() * Float32(0.4)
         if r < 0.5:
             var hx = 0.25 + 0.3 * Float64(self.rng.next_f32())
             var hy = 0.25 + 0.3 * Float64(self.rng.next_f32())
@@ -321,10 +338,10 @@ struct Showcase(Movable):
         self._lights()
 
     def camera(self) -> CameraPose:
-        var target = v3(0.0, 1.2, -0.5)
+        var target = v3(0.0, 1.0, -1.5)
         var eye = target + v3(ORBIT_RADIUS * cos(self.pitch) * sin(self.yaw), ORBIT_HEIGHT * sin(self.pitch) / sin(0.33),
                               ORBIT_RADIUS * cos(self.pitch) * cos(self.yaw))
-        return CameraPose(eye, look_rotation(target - eye, v3(0, 1, 0)), Real(0.85), Real(16.0 / 9.0), Real(0.1), Real(400.0))
+        return CameraPose(eye, look_rotation(target - eye, v3(0, 1, 0)), Real(0.75), Real(16.0 / 9.0), Real(0.1), Real(400.0))
 
     def items(self) raises -> List[DrawItem]:
         """Every body as a MAT_PBR item (so it casts a shadow), the glowing caps as unlit colour."""
@@ -338,9 +355,9 @@ struct Showcase(Movable):
             out.append(DrawItem(b.kind, s.pos, Float64(s.rot.x), Float64(s.rot.y), Float64(s.rot.z), Float64(s.rot.w), b.half, b.color,
                                 -1, -1, MAT_PBR, 0, b.roughness, b.metallic))
         for p in self.glow_posts():
-            out.append(DrawItem(1, p, 0.0, 0.0, 0.0, 1.0, v3(0.22, 0.22, 0.22), v3(4.0, 3.0, 1.6)))
+            out.append(DrawItem(1, p, 0.0, 0.0, 0.0, 1.0, v3(0.13, 0.13, 0.13), v3(2.6, 1.8, 1.0)))
         for l in self.lights[:3]:
-            out.append(DrawItem(1, l.pos, 0.0, 0.0, 0.0, 1.0, v3(0.12, 0.12, 0.12), l.color * Real(4.0)))
+            out.append(DrawItem(1, l.pos, 0.0, 0.0, 0.0, 1.0, v3(0.07, 0.07, 0.07), l.color * Real(2.5)))
         return out^
 
     def live_particles(self) -> Int:

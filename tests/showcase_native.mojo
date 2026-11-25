@@ -28,7 +28,7 @@ def main() raises:
     var a = run(600, 7)
     var ms = Float64(perf_counter_ns() - t0) / 1e6
     print("600 frames (10 s) in", ms, "ms native,", ms / 600.0, "ms per frame")
-    need(a.drops >= 25, "bodies are dropped (" + String(a.drops) + " in 10 s)")
+    need(a.drops >= 18, "bodies are dropped (" + String(a.drops) + " in 10 s)")
     need(len(a.dynamic) <= MAX_DYNAMIC, "at most MAX_DYNAMIC dynamic bodies (" + String(len(a.dynamic)) + ")")
     need(a.bursts > 0, "impacts start spark bursts (" + String(a.bursts) + ")")
     var spark_live = 0
