@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: Hundo1018/ludens-engine
-          ref: 06c79b4a4039bd67beb9a92b4038287286941d38
+          ref: 61aeac2108b3b4c9e5d95563445aa11b242040ad
           path: engine
       - uses: prefix-dev/setup-pixi@v0.10.2
         with:
@@ -139,6 +139,11 @@ jobs:
             pixi run --manifest-path engine/pixi.toml -e wasm node scripts/town_ai_check.mjs \
               "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/index.html" 300 || exit 1
           done
+      - name: "Visual showcase: font, MSAA, every switch changes the picture, wasm64 hash equals native, frame cost (scripts/showcase_check.mjs)"
+        run: |
+          NATIVE=$(pixi run --manifest-path engine/pixi.toml -e wasm bash scripts/test_native.sh tests/showcase_native.mojo | tee /dev/stderr | sed -n 's/^showcase hash 600 frames seed 7: //p')
+          pixi run --manifest-path engine/pixi.toml -e wasm node scripts/showcase_check.mjs \
+            "$(which google-chrome || which chromium)" "http://127.0.0.1:8150/showcase/index.html?offscreen" build/shots/showcase 900 "$NATIVE"
       - name: Native and wasm give the same numbers
         run: |
           HOST="$(pixi run --manifest-path engine/pixi.toml -e wasm python3 -c 'import ludens_wasm_rt; print(ludens_wasm_rt.HOST_MJS)')"
