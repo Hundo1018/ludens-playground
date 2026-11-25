@@ -35,10 +35,15 @@ await send('Runtime.enable');
 await send('Page.enable');
 await send('Page.navigate', { url });
 
+// how long one capture may take, in wall time: a frame on a slow CI runner's SwiftShader took 8.5 to over 15 s, and a
+// wait counted in animation frames (900, about 15 s) ran out there; the capture it left behind then arrived as the next
+// picture, so every later comparison was one frame off
+const WAIT_MS = Number(process.env.SHOWCASE_WAIT_MS || 120000);
 const GRAB = `(async () => {
+  const WAIT_MS = ${WAIT_MS};
   const h = window.host, x = h.x, app = h.app, c = document.querySelector('canvas');
   x.showcase_request_capture(app);
-  for (let i = 0; i < 900 && x.showcase_capture_ptr(app) === 0n; i++) await new Promise((r) => requestAnimationFrame(r));
+  for (const end = performance.now() + WAIT_MS; x.showcase_capture_ptr(app) === 0n && performance.now() < end;) await new Promise((r) => requestAnimationFrame(r));
   const p = x.showcase_capture_ptr(app); if (p === 0n) return null;
   const pitch = x.showcase_capture_pitch(app), w = c.width, hgt = c.height;
   const d = h.rt.bytes(p, pitch * hgt).slice();
@@ -79,11 +84,12 @@ if (nativeHash) need(h600 === nativeHash, `wasm64 hash equals native (${h600} vs
 // mapped pixels is one whole frame on the GPU (scene step, encode, the passes and stages, the HUD) plus a read-back of
 // 1280 x 720 x 4 bytes. The step and encode times (CPU, inside the frame call) come from the host for the same frame.
 const ROUNDTRIP = `(async (n) => {
+  const WAIT_MS = ${WAIT_MS};
   const h = window.host, x = h.x, app = h.app, out = [];
   for (let k = 0; k < n; k++) {
     const t0 = performance.now();
     x.showcase_request_capture(app);
-    for (let i = 0; i < 900 && x.showcase_capture_ptr(app) === 0n; i++) await new Promise((r) => requestAnimationFrame(r));
+    for (const end = performance.now() + WAIT_MS; x.showcase_capture_ptr(app) === 0n && performance.now() < end;) await new Promise((r) => requestAnimationFrame(r));
     const t1 = performance.now();
     if (x.showcase_capture_ptr(app) === 0n) return null;
     x.showcase_capture_release(app);
@@ -134,7 +140,7 @@ console.log('pixels changed against the full picture (of', base ? base.length / 
 // the scene is held: two full pictures in a row must be the same
 const again = await grab('all_on_again');
 const outsideStats = (a, b) => { let n = 0; const w = 1280; for (let q = 0; q < a.length; q += 4) { const p = q / 4, px = p % w, py = Math.floor(p / w);
-  if (px < 344 && py >= 200 && py < 272) continue; // the HUD's two stats lines change with the measured time
+  if (px < 290 && py >= 180 && py < 226) continue; // the HUD's two stats lines change with the measured time
   if (Math.abs(a[q] - b[q]) + Math.abs(a[q + 1] - b[q + 1]) + Math.abs(a[q + 2] - b[q + 2]) > 30) n++; } return n; };
 const motion = again && base ? outsideStats(base, again) : 0;
 need(motion === 0, `two full pictures of the held scene are the same outside the HUD's stats lines (${motion} pixels differ)`);
